@@ -11,8 +11,8 @@ namespace Trimmel_MCTG.DB
         public int PackageId { get; set; }
         public int CardId { get; set; }
 
-        public Package Package { get; set; } // Navigation property to the Package entity
-        public Card Card { get; set; } // Navigation property to the Card entity
+        public Package ?Package { get; set; } // Navigation property to the Package entity
+        public Card ?Card { get; set; } // Navigation property to the Card entity
     }
 
 }

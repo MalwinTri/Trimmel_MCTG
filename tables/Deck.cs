@@ -15,11 +15,11 @@ namespace Trimmel_MCTG.DB
         public int Card3Id { get; set; }
         public int Card4Id { get; set; }
 
-        public User User { get; set; } // Navigation property to the User entity
-        public Card Card1 { get; set; } // Navigation property to Card 1
-        public Card Card2 { get; set; } // Navigation property to Card 2
-        public Card Card3 { get; set; } // Navigation property to Card 3
-        public Card Card4 { get; set; } // Navigation property to Card 4
+        public User ?User { get; set; } // Navigation property to the User entity
+        public Card ?Card1 { get; set; } // Navigation property to Card 1
+        public Card ?Card2 { get; set; } // Navigation property to Card 2
+        public Card ?Card3 { get; set; } // Navigation property to Card 3
+        public Card ?Card4 { get; set; } // Navigation property to Card 4
     }
 
 }

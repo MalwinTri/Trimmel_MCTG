@@ -14,8 +14,8 @@ namespace Trimmel_MCTG.DB
         public CardType RequiredType { get; set; } // Enum for 'spell' or 'monster'
         public int MinDamage { get; set; }
 
-        public User User { get; set; } // Navigation property to the User entity
-        public Card OfferedCard { get; set; } // Navigation property to the offered card
+        public User ?User { get; set; } // Navigation property to the User entity
+        public Card ?OfferedCard { get; set; } // Navigation property to the offered card
     }
 
 }

@@ -13,7 +13,7 @@ namespace Trimmel_MCTG.DB
         public int Losses { get; set; } = 0;
         public int Elo { get; set; } = 1000; // Default value for Elo rating
 
-        public User User { get; set; } // Navigation property to the User entity
+        public User ?User { get; set; } // Navigation property to the User entity
     }
 
 }

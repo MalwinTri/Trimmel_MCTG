@@ -12,8 +12,8 @@ namespace Trimmel_MCTG.DB
         public int CardId { get; set; }
         public bool InDeck { get; set; } = false;
 
-        public User User { get; set; } // Navigation property to the User entity
-        public Card Card { get; set; } // Navigation property to the Card entity
+        public User ?User { get; set; } // Navigation property to the User entity
+        public Card ?Card { get; set; } // Navigation property to the Card entity
     }
 
 }
