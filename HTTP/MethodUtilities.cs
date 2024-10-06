@@ -1,14 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Trimmel_MCTG.HTTP
 {
     public enum HttpMethod
     {
-        Get, 
+        Get,
         Post,
         Put,
         Delete,
@@ -19,14 +16,14 @@ namespace Trimmel_MCTG.HTTP
     {
         public static HttpMethod GetMethod(string method)
         {
-            return method.ToLower() switch
+            return method.ToUpperInvariant() switch
             {
-                "get" => HttpMethod.Get,
-                "post" => HttpMethod.Post,
-                "delete" => HttpMethod.Delete,
-                "put" => HttpMethod.Put,
-                "patch" => HttpMethod.Patch,
-                _ => throw new InvalidDataException()
+                "GET" => HttpMethod.Get,
+                "POST" => HttpMethod.Post,
+                "DELETE" => HttpMethod.Delete,
+                "PUT" => HttpMethod.Put,
+                "PATCH" => HttpMethod.Patch,
+                _ => throw new InvalidDataException($"Unknown HTTP method: {method}")
             };
         }
     }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MCTG_Trimmel.HTTP;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -32,11 +33,49 @@ namespace Trimmel_MCTG.HTTP
 
                 var clientThread = new Thread(() =>
                 {
-                    var client = new Trimmel_MCTG.HTTP.HttpClient(connection);
+                    try
+                    {
+                        var client = new HttpClient(connection);
+                        var request = client.ReceiveRequest();
 
-                    var request = client.ReciveRequest();
+                        Response response;
+                        if (request == null)
+                        {
+                            response = new Response
+                            {
+                                StatusCode = StatusCode.BadRequest,
+                                Payload = "Invalid Request"
+                            };
+                        }
+                        else
+                        {
+                            response = new Response
+                            {
+                                StatusCode = StatusCode.Ok,
+                                Payload = "Request received successfully"
+                            };
+                        }
+
+                        client.SendResponse(response);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error handling client: {ex.Message}");
+                    }
+                    finally
+                    {
+                        connection.Close();
+                    }
                 });
+
+                clientThread.Start();
             }
+        }
+
+        public void Stop()
+        {
+            listener = false;
+            tcpListener.Stop();
         }
     }
 }

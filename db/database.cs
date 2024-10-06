@@ -1,26 +1,34 @@
-﻿using Npgsql;
+﻿using BCrypt.Net;
+using Npgsql;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Trimmel_MCTG.DB;
 
 namespace Trimmel_MCTG.db
 {
-    public class Database
+    public class Database : IDisposable
     {
-        NpgsqlConnection conn;
-        string connection = "Host=localhost;Port=5432;Username=postgres;Password=#;Database=mctg_trimmel";
+        private readonly NpgsqlConnection conn;
+        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=#;Database=mctg_trimmel";
+
         public Database()
         {
-            conn = new NpgsqlConnection(connection);
-            conn.Open();
+            try
+            {
+                conn = new NpgsqlConnection(connectionString);
+                conn.Open();
+                Console.WriteLine("Database connection established successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error opening database connection: {ex.Message}");
+                throw;
+            }
         }
 
-        public void createTables()
+        public void CreateTables()
         {
-            string CreateTablesCommand = @"
+            string createTablesCommand = @"
                 CREATE TABLE IF NOT EXISTS users (
                     user_id SERIAL PRIMARY KEY,
                     username VARCHAR(50) NOT NULL UNIQUE,
@@ -84,47 +92,106 @@ namespace Trimmel_MCTG.db
                     offered_card_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
                     required_type VARCHAR(50) NOT NULL CHECK (required_type IN ('spell', 'monster')),
                     min_damage INT
-                );
+                );";
 
-                CREATE OR REPLACE FUNCTION set_default_coins()
-                RETURNS TRIGGER AS $$
-                BEGIN
-                    IF NEW.coins IS NULL THEN
-                        NEW.coins := 20;
-                    END IF;
-                    RETURN NEW;
-                END;
-                $$ LANGUAGE plpgsql;
-
-                CREATE TRIGGER set_default_coins_trigger
-                BEFORE INSERT ON users
-                FOR EACH ROW
-                EXECUTE FUNCTION set_default_coins();
-                ";
-
-            using (NpgsqlCommand cmd = new NpgsqlCommand(CreateTablesCommand, conn))
+            try
             {
-                cmd.ExecuteNonQuery();
+                using (NpgsqlCommand cmd = new NpgsqlCommand(createTablesCommand, conn))
+                {
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine("Tables created successfully or already exist.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating tables: {ex.Message}");
             }
         }
 
         public bool IsUserInDatabase(User user)
         {
-
-            using (NpgsqlCommand cmd = new NpgsqlCommand("select username from users where username = @username", conn))
+            try
             {
-                cmd.Parameters.AddWithValue("username", user.Username);
-                using (NpgsqlDataReader reader = cmd.ExecuteReader())
+                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT username FROM users WHERE username = @username", conn))
                 {
-                    if (reader.HasRows)
+                    cmd.Parameters.AddWithValue("username", user.Username);
+                    using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
-                        return true;
+                        return reader.HasRows;
                     }
                 }
-
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error checking if user exists: {ex.Message}");
+                return false;
+            }
+        }
+
+        public bool CreateUser(User user)
+        {
+            try
+            {
+                if (IsUserInDatabase(user))
+                {
+                    Console.WriteLine("User already exists.");
+                    return false;
+                }
+
+                string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
+                {
+                    cmd.Parameters.AddWithValue("username", user.Username);
+                    cmd.Parameters.AddWithValue("password", hashedPassword);
+                    cmd.Parameters.AddWithValue("coins", 20); // Set default coins value
+
+                    int rowsAffected = cmd.ExecuteNonQuery();
+                    return rowsAffected > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during user creation: {ex.Message}");
+            }
+
             return false;
         }
 
+        public bool Logging(User user)
+        {
+            try
+            {
+                if (!IsUserInDatabase(user))
+                {
+                    return false;
+                }
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password FROM users WHERE username = @username;", conn))
+                {
+                    cmd.Parameters.AddWithValue("username", user.Username);
+                    using (NpgsqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            string storedPassword = reader.GetString(0);
+                            return BCrypt.Net.BCrypt.Verify(user.Password, storedPassword);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during user login: {ex.Message}");
+            }
+
+            return false;
+        }
+
+        public void Dispose()
+        {
+            conn?.Close();
+            conn?.Dispose();
+        }
     }
 }
