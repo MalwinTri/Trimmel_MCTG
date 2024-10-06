@@ -9,7 +9,7 @@ namespace Trimmel_MCTG.db
     public class Database : IDisposable
     {
         private readonly NpgsqlConnection conn;
-        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=#;Database=mctg_trimmel";
+        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=a4gq4heU2cF*;Database=mctg_trimmel";
 
         public Database()
         {
@@ -33,7 +33,8 @@ namespace Trimmel_MCTG.db
                     user_id SERIAL PRIMARY KEY,
                     username VARCHAR(50) NOT NULL UNIQUE,
                     password VARCHAR(255) NOT NULL,
-                    coins INT DEFAULT 20
+                    coins INT DEFAULT 20,
+                    token VARCHAR(255) UNIQUE
                 );
 
                 CREATE TABLE IF NOT EXISTS user_stats (
@@ -139,12 +140,14 @@ namespace Trimmel_MCTG.db
                 }
 
                 string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                string userToken = Guid.NewGuid().ToString(); 
 
-                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
+                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins, token) VALUES (@username, @password, @coins, @token);", conn))
                 {
                     cmd.Parameters.AddWithValue("username", user.Username);
                     cmd.Parameters.AddWithValue("password", hashedPassword);
-                    cmd.Parameters.AddWithValue("coins", 20); // Set default coins value
+                    cmd.Parameters.AddWithValue("coins", 20);
+                    cmd.Parameters.AddWithValue("token", userToken);
 
                     int rowsAffected = cmd.ExecuteNonQuery();
                     return rowsAffected > 0;
@@ -158,16 +161,16 @@ namespace Trimmel_MCTG.db
             return false;
         }
 
-        public bool Logging(User user)
+        public string? Logging(User user)
         {
             try
             {
                 if (!IsUserInDatabase(user))
                 {
-                    return false;
+                    return null;
                 }
 
-                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password FROM users WHERE username = @username;", conn))
+                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password, token FROM users WHERE username = @username;", conn))
                 {
                     cmd.Parameters.AddWithValue("username", user.Username);
                     using (NpgsqlDataReader reader = cmd.ExecuteReader())
@@ -175,7 +178,11 @@ namespace Trimmel_MCTG.db
                         if (reader.Read())
                         {
                             string storedPassword = reader.GetString(0);
-                            return BCrypt.Net.BCrypt.Verify(user.Password, storedPassword);
+                            string userToken = reader.GetString(1);
+                            if (BCrypt.Net.BCrypt.Verify(user.Password, storedPassword))
+                            {
+                                return userToken; 
+                            }
                         }
                     }
                 }
@@ -185,7 +192,7 @@ namespace Trimmel_MCTG.db
                 Console.WriteLine($"Error during user login: {ex.Message}");
             }
 
-            return false;
+            return null;
         }
 
         public void Dispose()
