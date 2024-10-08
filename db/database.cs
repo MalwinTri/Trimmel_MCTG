@@ -195,6 +195,50 @@ namespace Trimmel_MCTG.db
             return null;
         }
 
+        public bool CheckAndRegister(User user)
+        {
+            if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
+            {
+                Console.WriteLine("Invalid user information.");
+                return false;
+            }
+
+            if (IsUserInDatabase(user))
+            {
+                Console.WriteLine($"User {user.Username} already exists.");
+                return false;
+            }
+
+            try
+            {
+                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
+                {
+                    cmd.Parameters.AddWithValue("username", user.Username);
+
+                    // Hash the password for security
+                    string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                    cmd.Parameters.AddWithValue("password", hashedPassword);
+
+                    // Set default coins value from user object
+                    cmd.Parameters.AddWithValue("coins", user.Coins);
+
+                    cmd.ExecuteNonQuery();
+                    return true;
+                }
+            }
+            catch (PostgresException ex)
+            {
+                Console.WriteLine($"Failed to register user {user.Username}: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected error occurred while registering user {user.Username}: {ex.Message}");
+            }
+
+            return false;
+        }
+
+
         public void Dispose()
         {
             conn?.Close();

@@ -1,14 +1,13 @@
-﻿using MCTG_Trimmel.HTTP;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using MCTG_Trimmel.HTTP;
 using Newtonsoft.Json;
 
 namespace Trimmel_MCTG.HTTP
 {
-    public class HttpClient
+    public class HttpClient : IDisposable
     {
         private readonly TcpClient connection;
 
@@ -82,11 +81,34 @@ namespace Trimmel_MCTG.HTTP
             {
                 Method = method,
                 ResourcePath = path,
-                Token = userToken, // Hier wurde der Name korrigiert
+                Token = userToken,
                 HttpVersion = version,
                 Header = headers,
                 Payload = payload
             };
+        }
+
+        public void SendResponse(Response response)
+        {
+            using var writer = new StreamWriter(connection.GetStream(), Encoding.UTF8) { AutoFlush = true };
+            writer.Write($"HTTP/1.1 {(int)response.StatusCode} {response.StatusCode}\r\n");
+            if (!string.IsNullOrEmpty(response.Payload))
+            {
+                var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response.Payload));
+                writer.Write($"Content-Length: {payload.Length}\r\n");
+                writer.Write("\r\n");
+                writer.Write(Encoding.UTF8.GetString(payload));
+            }
+            else
+            {
+                writer.Write("\r\n");
+            }
+        }
+
+        public void Dispose()
+        {
+            connection?.Close();
+            connection?.Dispose();
         }
 
         private (HttpMethod, string?, string?) ParseRequestLine(string line)
@@ -127,35 +149,21 @@ namespace Trimmel_MCTG.HTTP
             }
 
             char[] buffer = new char[contentLength];
-            int bytesRead = reader.Read(buffer, 0, contentLength);
-            if (bytesRead == 0)
+            int totalBytesRead = 0;
+            var data = new StringBuilder();
+
+            while (totalBytesRead < contentLength)
             {
-                return null;
+                int bytesRead = reader.Read(buffer, 0, Math.Min(buffer.Length, contentLength - totalBytesRead));
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+                totalBytesRead += bytesRead;
+                data.Append(buffer, 0, bytesRead);
             }
 
-            return new string(buffer, 0, bytesRead);
-        }
-
-        public void SendResponse(Response response)
-        {
-            using var writer = new StreamWriter(connection.GetStream(), Encoding.UTF8) { AutoFlush = true };
-            writer.Write($"HTTP/1.1 {(int)response.StatusCode} {response.StatusCode}\r\n");
-            if (!string.IsNullOrEmpty(response.Payload))
-            {
-                var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response.Payload));
-                writer.Write($"Content-Length: {payload.Length}\r\n");
-                writer.Write("\r\n");
-                writer.Write(Encoding.UTF8.GetString(payload));
-            }
-            else
-            {
-                writer.Write("\r\n");
-            }
-        }
-
-        public void Close()
-        {
-            connection.Close();
+            return data.ToString();
         }
     }
 }

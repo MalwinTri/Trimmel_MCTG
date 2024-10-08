@@ -3,9 +3,10 @@ using System.Net;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 
-Console.WriteLine("Hello world");
+Console.WriteLine("Server starting");
 Database db = new Database();
 db.CreateTables();
 
-HttpServer server = new HttpServer(IPAddress.Loopback, 1000);
+Route route = new Route();
+HttpServer server = new HttpServer(IPAddress.Loopback, 10001, route);
 server.Start();
