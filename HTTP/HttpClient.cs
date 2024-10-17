@@ -1,169 +1,108 @@
-﻿using System;
-using System.IO;
+﻿using MCTG_Trimmel.HTTP;
 using System.Net.Sockets;
 using System.Text;
-using MCTG_Trimmel.HTTP;
-using Newtonsoft.Json;
 
 namespace Trimmel_MCTG.HTTP
 {
-    public class HttpClient : IDisposable
+    public class HttpClient
     {
         private readonly TcpClient connection;
 
-        public HttpClient(TcpClient? connection)
+        public HttpClient(TcpClient connection)
         {
-            this.connection = connection ?? throw new ArgumentNullException(nameof(connection), "TcpClient cannot be null");
+            this.connection = connection ?? throw new ArgumentNullException(nameof(connection));
         }
 
         public RequestContext? ReceiveRequest()
         {
-            using var reader = new StreamReader(connection.GetStream(), Encoding.UTF8);
-            var isFirstLine = true;
+            // Buffer to hold received data
+            var buffer = new byte[1024];
+            var stream = connection.GetStream();
+            int bytesRead = stream.Read(buffer, 0, buffer.Length);
 
-            HttpMethod method = HttpMethod.Get;
-            string? path = null;
-            string? version = null;
-            string? userToken = null;
-            var headers = new Dictionary<string, string>();
-            int contentLength = 0;
-            string? payload = null;
-
-            try
+            if (bytesRead <= 0)
             {
-                string? line;
-                while (!string.IsNullOrWhiteSpace(line = reader.ReadLine()?.Trim()))
-                {
-                    if (isFirstLine)
-                    {
-                        (method, path, version) = ParseRequestLine(line);
-                        isFirstLine = false;
-                    }
-                    else
-                    {
-                        (string headerKey, string headerValue) = ParseHeaderLine(line);
-                        headers[headerKey] = headerValue;
-
-                        if (headerKey.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
-                        {
-                            userToken = headerValue;
-                        }
-
-                        if (headerKey.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (!int.TryParse(headerValue, out contentLength))
-                            {
-                                throw new InvalidDataException("Invalid Content-Length value.");
-                            }
-                        }
-                    }
-                }
-
-                if (path == null || version == null)
-                {
-                    throw new InvalidDataException("Invalid HTTP request. Path or version is missing.");
-                }
-
-                payload = ReadPayload(reader, contentLength);
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"I/O error while reading request: {ex.Message}");
-                return null;
-            }
-            catch (InvalidDataException ex)
-            {
-                Console.WriteLine($"Invalid HTTP request: {ex.Message}");
                 return null;
             }
 
-            return new RequestContext
-            {
-                Method = method,
-                ResourcePath = path,
-                Token = userToken,
-                HttpVersion = version,
-                Header = headers,
-                Payload = payload
-            };
+            var requestString = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            Console.WriteLine("Request Received: " + requestString);
+
+            return ParseRequest(requestString);
         }
 
         public void SendResponse(Response response)
         {
-            using var writer = new StreamWriter(connection.GetStream(), Encoding.UTF8) { AutoFlush = true };
-            writer.Write($"HTTP/1.1 {(int)response.StatusCode} {response.StatusCode}\r\n");
-            if (!string.IsNullOrEmpty(response.Payload))
+            var stream = connection.GetStream();
+
+            string responseString;
+            if (response.StatusCode == StatusCode.Created)
             {
-                var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response.Payload));
-                writer.Write($"Content-Length: {payload.Length}\r\n");
-                writer.Write("\r\n");
-                writer.Write(Encoding.UTF8.GetString(payload));
+                responseString = $"{GetHttpStatusCode(response.StatusCode)}\r\n" +
+                                 "User created successfully";
             }
             else
             {
-                writer.Write("\r\n");
+                responseString = $"{GetHttpStatusCode(response.StatusCode)}\r\n" +
+                                 $"{response.Payload}";
             }
+
+            var responseBytes = Encoding.UTF8.GetBytes(responseString);
+
+            // Send response to client
+            stream.Write(responseBytes, 0, responseBytes.Length);
+            stream.Flush();
+
+            Console.WriteLine("Response Sent: " + responseString);
         }
 
-        public void Dispose()
+        // Komischer Weise funktioniert es nur hier wenn ich den StatusCode bekommen will
+        private string GetHttpStatusCode(StatusCode statusCode)
         {
-            connection?.Close();
-            connection?.Dispose();
+            return statusCode switch
+            {
+                StatusCode.Ok => "200 OK",
+                StatusCode.Created => "201 Created",
+                StatusCode.Accepted => "202 Accepted",
+                StatusCode.NoContent => "204 No Content",
+                StatusCode.BadRequest => "400 Bad Request",
+                StatusCode.Unauthorized => "401 Unauthorized",
+                StatusCode.Forbidden => "403 Forbidden",
+                StatusCode.NotFound => "404 Not Found",
+                StatusCode.Conflict => "409 Conflict",
+                StatusCode.InternalServerError => "500 Internal Server Error",
+                StatusCode.NotImplemented => "501 Not Implemented",
+                _ => "500 Internal Server Error"
+            };
         }
 
-        private (HttpMethod, string?, string?) ParseRequestLine(string line)
+        private RequestContext? ParseRequest(string requestString)
         {
-            var parts = line.Split(' ');
-            if (parts.Length != 3)
+            var lines = requestString.Split("\r\n");
+            if (lines.Length > 0)
             {
-                throw new InvalidDataException("Invalid HTTP request line format.");
-            }
-
-            var method = MethodUtilities.GetMethod(parts[0].Trim());
-            var path = parts[1].Trim();
-            var version = parts[2].Trim();
-
-            return (method, path, version);
-        }
-
-        private (string, string) ParseHeaderLine(string line)
-        {
-            var headerParts = line.Split(':', 2);
-            if (headerParts.Length == 2)
-            {
-                var headerKey = headerParts[0].Trim();
-                var headerValue = headerParts[1].Trim();
-                return (headerKey, headerValue);
-            }
-            else
-            {
-                throw new InvalidDataException("Invalid HTTP header format.");
-            }
-        }
-
-        private string? ReadPayload(StreamReader reader, int contentLength)
-        {
-            if (contentLength <= 0)
-            {
-                return null;
-            }
-
-            char[] buffer = new char[contentLength];
-            int totalBytesRead = 0;
-            var data = new StringBuilder();
-
-            while (totalBytesRead < contentLength)
-            {
-                int bytesRead = reader.Read(buffer, 0, Math.Min(buffer.Length, contentLength - totalBytesRead));
-                if (bytesRead == 0)
+                var parts = lines[0].Split(' ');
+                if (parts.Length >= 2)
                 {
-                    break;
+                    var methodString = parts[0];
+                    var path = parts[1];
+
+                    if (Enum.TryParse<HttpMethod>(methodString, true, out var method))
+                    {
+                        // Assuming POST requests have a body, typically after an empty line
+                        var body = lines.LastOrDefault();
+
+                        return new RequestContext
+                        {
+                            Method = method,
+                            ResourcePath = path,
+                            Payload = body
+                        };
+                    }
                 }
-                totalBytesRead += bytesRead;
-                data.Append(buffer, 0, bytesRead);
             }
 
-            return data.ToString();
+            return null;
         }
     }
 }

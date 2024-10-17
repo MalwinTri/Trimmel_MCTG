@@ -1,4 +1,5 @@
 ﻿using MCTG_Trimmel.HTTP;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
@@ -16,12 +17,14 @@ namespace Trimmel_MCTG.HTTP
     {
         private readonly TcpListener tcpListener;
         private readonly Route route;
+        private readonly Database db; // Shared database instance
         private bool listener;
 
         public HttpServer(IPAddress address, int port, Route route)
         {
             tcpListener = new TcpListener(address, port);
             this.route = route;
+            db = new Database(); // Create a single shared database connection
         }
 
         public void Start()
@@ -71,7 +74,6 @@ namespace Trimmel_MCTG.HTTP
             try
             {
                 using (connection) // Sicherstellen, dass die Verbindung korrekt geschlossen wird
-                using (var db = new Database()) // Neue Datenbankverbindung für jeden Client-Handler erstellen
                 {
                     var client = new HttpClient(connection);
                     var request = client.ReceiveRequest();
@@ -91,20 +93,23 @@ namespace Trimmel_MCTG.HTTP
                     {
                         try
                         {
-                            // Nutzen Sie die neue Datenbankverbindung, die im Handler erstellt wurde
-                            var command = route.Resolve(request);
-                            if (command != null)
+                            // dass nur ein Thread gleichzeitig darauf zugreift.
+                            lock (db)
                             {
-                                command.SetDatabase(db); // Setzen der Datenbankverbindung
-                                response = command.Execute();
-                            }
-                            else
-                            {
-                                response = new Response
+                                var command = route.Resolve(request);
+                                if (command != null)
                                 {
-                                    StatusCode = StatusCode.NotFound,
-                                    Payload = "No route found for the given request."
-                                };
+                                    command.SetDatabase(db); // Setzen der Datenbankverbindung
+                                    response = command.Execute();
+                                }
+                                else
+                                {
+                                    response = new Response
+                                    {
+                                        StatusCode = StatusCode.NotFound,
+                                        Payload = "No route found for the given request."
+                                    };
+                                }
                             }
                         }
                         catch (Exception commandEx)

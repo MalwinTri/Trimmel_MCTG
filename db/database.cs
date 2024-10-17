@@ -109,6 +109,33 @@ namespace Trimmel_MCTG.db
             }
         }
 
+        public void DropTables()
+        {
+            string dropTablesCommand = @"
+                DROP TABLE IF EXISTS trades;
+                DROP TABLE IF EXISTS battles;
+                DROP TABLE IF EXISTS decks;
+                DROP TABLE IF EXISTS package_cards;
+                DROP TABLE IF EXISTS packages;
+                DROP TABLE IF EXISTS user_stacks;
+                DROP TABLE IF EXISTS cards;
+                DROP TABLE IF EXISTS user_stats;
+                DROP TABLE IF EXISTS users;";
+
+            try
+            {
+                using (NpgsqlCommand cmd = new NpgsqlCommand(dropTablesCommand, conn))
+                {
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine("All tables dropped successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error dropping tables: {ex.Message}");
+            }
+        }
+
         public bool IsUserInDatabase(User user)
         {
             try
@@ -140,7 +167,7 @@ namespace Trimmel_MCTG.db
                 }
 
                 string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
-                string userToken = Guid.NewGuid().ToString(); 
+                string userToken = Guid.NewGuid().ToString();
 
                 using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins, token) VALUES (@username, @password, @coins, @token);", conn))
                 {
@@ -161,38 +188,49 @@ namespace Trimmel_MCTG.db
             return false;
         }
 
-        public string? Logging(User user)
+        public bool Logging(User user)
         {
+            // Überprüfung, ob die Benutzerinformationen vollständig sind
+            if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
+            {
+                Console.WriteLine("Invalid user information.");
+                return false;
+            }
+
             try
             {
-                if (!IsUserInDatabase(user))
-                {
-                    return null;
-                }
-
-                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password, token FROM users WHERE username = @username;", conn))
+                // Benutzer in der Datenbank suchen
+                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password FROM users WHERE username = @username;", conn))
                 {
                     cmd.Parameters.AddWithValue("username", user.Username);
+                    string? storedPasswordHash = null;
+
                     using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
                         if (reader.Read())
                         {
-                            string storedPassword = reader.GetString(0);
-                            string userToken = reader.GetString(1);
-                            if (BCrypt.Net.BCrypt.Verify(user.Password, storedPassword))
-                            {
-                                return userToken; 
-                            }
+                            storedPasswordHash = reader.GetString(0);
                         }
+                    }
+
+                    // Überprüfung, ob ein Passwort gefunden wurde und es mit dem übergebenen Passwort übereinstimmt
+                    if (!string.IsNullOrEmpty(storedPasswordHash) && BCrypt.Net.BCrypt.Verify(user.Password, storedPasswordHash))
+                    {
+                        // Token generieren und speichern
+                        return GenerateAndStoreToken(user);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Login failed for user: {user.Username}");
+                        return false; // Passwort falsch oder Benutzer existiert nicht
                     }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error during user login: {ex.Message}");
+                return false; // Fehlerbehandlung
             }
-
-            return null;
         }
 
         public bool CheckAndRegister(User user)
@@ -238,11 +276,45 @@ namespace Trimmel_MCTG.db
             return false;
         }
 
+        public bool GenerateAndStoreToken(User user)
+        {
+            // Token Generieren - Randomly generate a secure token using Guid
+            string token = Guid.NewGuid().ToString();
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand("UPDATE users SET token = @token WHERE username = @username", conn))
+                {
+                    cmd.Parameters.AddWithValue("username", user.Username);
+                    cmd.Parameters.AddWithValue("token", token);
+
+                    int rowsAffected = cmd.ExecuteNonQuery();
+                    return rowsAffected > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error generating and storing token for user {user.Username}: {ex.Message}");
+                return false;
+            }
+        }
 
         public void Dispose()
         {
-            conn?.Close();
-            conn?.Dispose();
+            try
+            {
+                DropTables();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during table drop in Dispose: {ex.Message}");
+            }
+            finally
+            {
+                conn?.Close();
+                conn?.Dispose();
+                Console.WriteLine("Database connection closed and disposed.");
+            }
         }
     }
 }
