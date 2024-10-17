@@ -9,7 +9,8 @@ namespace Trimmel_MCTG.db
     public class Database : IDisposable
     {
         private readonly NpgsqlConnection conn;
-        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=a4gq4heU2cF*;Database=mctg_trimmel";
+        // Connection String 
+        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=#;Database=mctg_trimmel";
 
         public Database()
         {
@@ -109,6 +110,7 @@ namespace Trimmel_MCTG.db
             }
         }
 
+        // Funktioniert eigentlich nicht. Erst am Ende wenn alles implementiert ist
         public void DropTables()
         {
             string dropTablesCommand = @"
@@ -140,11 +142,16 @@ namespace Trimmel_MCTG.db
         {
             try
             {
+                // SQL-Befehl vor, um zu überprüfen, ob der Benutzer bereits in der Datenbank existiert
                 using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT username FROM users WHERE username = @username", conn))
                 {
+                    // Füge den Benutzernamen als Parameter hinzu
                     cmd.Parameters.AddWithValue("username", user.Username);
+
+                    // Führe den SQL-Befehl aus und verwende einen Reader, um die Ergebnisse zu überprüfen
                     using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
+                        // Wenn der Reader Zeilen hat, existiert der Benutzer bereits
                         return reader.HasRows;
                     }
                 }
@@ -156,27 +163,36 @@ namespace Trimmel_MCTG.db
             }
         }
 
+
         public bool CreateUser(User user)
         {
             try
             {
+                // Überprüfe, ob der Benutzer bereits in der Datenbank vorhanden ist
                 if (IsUserInDatabase(user))
                 {
                     Console.WriteLine("User already exists.");
-                    return false;
+                    return false; // Beende die Methode und gib false zurück, wenn der Benutzer bereits existiert
                 }
 
+                // Hash das Passwort des Benutzers für die sichere Speicherung
                 string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                // Generiere ein Token für den Benutzer
                 string userToken = Guid.NewGuid().ToString();
 
+                // SQL-Befehl zum Einfügen eines neuen Benutzers in die Datenbank vor
                 using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins, token) VALUES (@username, @password, @coins, @token);", conn))
                 {
+                    // Füge die Parameter für den SQL-Befehl hinzu
                     cmd.Parameters.AddWithValue("username", user.Username);
                     cmd.Parameters.AddWithValue("password", hashedPassword);
-                    cmd.Parameters.AddWithValue("coins", 20);
+                    cmd.Parameters.AddWithValue("coins", 20); 
                     cmd.Parameters.AddWithValue("token", userToken);
 
+                    // Führe den SQL-Befehl aus und speichere die Anzahl der betroffenen Zeilen
                     int rowsAffected = cmd.ExecuteNonQuery();
+
+                    // Wenn mindestens eine Zeile betroffen ist, gib true zurück, ansonsten false
                     return rowsAffected > 0;
                 }
             }
@@ -184,9 +200,9 @@ namespace Trimmel_MCTG.db
             {
                 Console.WriteLine($"Error during user creation: {ex.Message}");
             }
-
             return false;
         }
+
 
         public bool Logging(User user)
         {

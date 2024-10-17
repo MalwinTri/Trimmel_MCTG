@@ -13,9 +13,9 @@ namespace Trimmel_MCTG.DB
         public int User2Id { get; set; }
         public int WinnerId { get; set; }
 
-        public User ?User1 { get; set; } // Navigation property to User 1
-        public User ?User2 { get; set; } // Navigation property to User 2
-        public User ?Winner { get; set; } // Navigation property to the winner
+        public User ?User1 { get; set; } 
+        public User ?User2 { get; set; } 
+        public User ?Winner { get; set; } 
     }
 
 }

@@ -11,11 +11,11 @@ namespace Trimmel_MCTG.DB
         public int TradeId { get; set; }
         public int UserId { get; set; }
         public int OfferedCardId { get; set; }
-        public CardType RequiredType { get; set; } // Enum for 'spell' or 'monster'
+        public CardType RequiredType { get; set; } 
         public int MinDamage { get; set; }
 
-        public User ?User { get; set; } // Navigation property to the User entity
-        public Card ?OfferedCard { get; set; } // Navigation property to the offered card
+        public User ?User { get; set; } 
+        public Card ?OfferedCard { get; set; } 
     }
 
 }

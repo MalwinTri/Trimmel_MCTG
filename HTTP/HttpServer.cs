@@ -17,14 +17,14 @@ namespace Trimmel_MCTG.HTTP
     {
         private readonly TcpListener tcpListener;
         private readonly Route route;
-        private readonly Database db; // Shared database instance
+        private readonly Database db; // Gemeinsame Datenbankinstanz
         private bool listener;
 
         public HttpServer(IPAddress address, int port, Route route)
         {
             tcpListener = new TcpListener(address, port);
             this.route = route;
-            db = new Database(); // Create a single shared database connection
+            db = new Database(); // Erstellen einer einzigen gemeinsamen Datenbankverbindung
         }
 
         public void Start()
@@ -93,6 +93,7 @@ namespace Trimmel_MCTG.HTTP
                     {
                         try
                         {
+
                             // dass nur ein Thread gleichzeitig darauf zugreift.
                             lock (db)
                             {
@@ -142,6 +143,7 @@ namespace Trimmel_MCTG.HTTP
 
         public void Stop()
         {
+            // Beenden des TcpListener
             listener = false;
             tcpListener.Stop();
             Console.WriteLine("Server has stopped listening for requests.");

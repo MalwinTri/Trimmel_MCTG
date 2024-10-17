@@ -12,7 +12,7 @@ namespace Trimmel_MCTG.DB
         public string ?Name { get; set; }
         public int Damage { get; set; }
         public string ?ElementType { get; set; }
-        public CardType CardType { get; set; } // Enum for 'spell' or 'monster'
+        public CardType CardType { get; set; } 
     }
 
     public enum CardType

@@ -11,7 +11,7 @@ namespace Trimmel_MCTG.DB
         public int UserId { get; set; }
         public string ?Username { get; set; }
         public string ?Password { get; set; }
-        public int Coins { get; set; } = 20; // Default value for coins
+        public int Coins { get; set; } = 20; 
         public string Token => $"{Username}-msgToken"; 
     }
 
