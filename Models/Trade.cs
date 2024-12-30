@@ -15,8 +15,8 @@ namespace Trimmel_MCTG.DB
 
         public int MinDamage { get; set; }
 
-        public User ?User { get; set; } 
-        public Card ?OfferedCard { get; set; }
+        public Users ?User { get; set; } 
+        public Cards ?OfferedCard { get; set; }
 
         public db.Database Database
         {

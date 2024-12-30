@@ -12,10 +12,10 @@ namespace Trimmel_MCTG.DB
         public int CardId { get; set; }
         public bool InDeck { get; set; } = false;
 
-        public User ?User { get; set; } 
-        public Card ?Card { get; set; }
+        public Users ?User { get; set; } 
+        public Cards ?Card { get; set; }
 
-        public Deck Deck
+        public Decks Deck
         {
             get => default;
             set

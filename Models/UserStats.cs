@@ -13,7 +13,7 @@ namespace Trimmel_MCTG.DB
         public int Losses { get; set; } = 0;
         public int Elo { get; set; } = 1000; 
 
-        public User ?User { get; set; }
+        public Users ?User { get; set; }
 
         public Battle Battle
         {

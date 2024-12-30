@@ -34,7 +34,7 @@ public class CreatePackageExecuter : IRouteCommand
         try
         {
             // Karten aus der Anfrage laden
-            var cards = JsonConvert.DeserializeObject<List<Card>>(requestContext.Payload);
+            var cards = JsonConvert.DeserializeObject<List<Cards>>(requestContext.Payload);
 
             // Überprüfen, ob genau 5 Karten übermittelt wurden
             if (cards == null || cards.Count != 5)

@@ -6,7 +6,7 @@ using Trimmel_MCTG.HTTP;
 
 public class RegisterExecuter : IRouteCommand
 {
-    private User user;
+    private Users user;
     private readonly RequestContext requestContext;
     private Database db;
 
@@ -22,7 +22,7 @@ public class RegisterExecuter : IRouteCommand
         }
 
         // Deserialisiere die Benutzerdaten aus dem Payload
-        user = JsonConvert.DeserializeObject<User>(requestContext.Payload) ?? throw new InvalidDataException("Invalid user data in the payload.");
+        user = JsonConvert.DeserializeObject<Users>(requestContext.Payload) ?? throw new InvalidDataException("Invalid user data in the payload.");
     }
 
     public IRoute IRoute

@@ -145,7 +145,7 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public bool IsUserInDatabase(User user)
+        public bool IsUserInDatabase(Users user)
         {
             try
             {
@@ -171,7 +171,7 @@ namespace Trimmel_MCTG.db
         }
 
 
-        public bool CreateUser(User user)
+        public bool CreateUser(Users user)
         {
             try
             {
@@ -211,7 +211,7 @@ namespace Trimmel_MCTG.db
         }
 
 
-        public bool Logging(User user)
+        public bool Logging(Users user)
         {
             // Überprüfung, ob die Benutzerinformationen vollständig sind
             if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
@@ -256,7 +256,7 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public bool CheckAndRegister(User user)
+        public bool CheckAndRegister(Users user)
         {
             if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
             {
@@ -299,7 +299,7 @@ namespace Trimmel_MCTG.db
             return false;
         }
 
-        public bool GenerateAndStoreToken(User user)
+        public bool GenerateAndStoreToken(Users user)
         {
             // Token Generieren - Randomly generate a secure token using Guid
             string token = Guid.NewGuid().ToString();
@@ -339,7 +339,7 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public void InsertCard(Card card)
+        public void InsertCard(Cards card)
         {
             // Prüfen, ob die Karte schon existiert
             string checkQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
@@ -373,7 +373,7 @@ namespace Trimmel_MCTG.db
         }
 
 
-        public void InsertCardWithoutId(Card card)
+        public void InsertCardWithoutId(Cards card)
         {
             string query = @"
                 INSERT INTO cards (name, damage, element_type, card_type)
@@ -436,7 +436,7 @@ namespace Trimmel_MCTG.db
 
 
 
-        public List<Card> GetCardsByPackageId(int packageId)
+        public List<Cards> GetCardsByPackageId(int packageId)
         {
             string query = @"
                 SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
@@ -444,7 +444,7 @@ namespace Trimmel_MCTG.db
                 INNER JOIN packageCards pc ON c.card_id = pc.card_id
                 WHERE pc.package_id = @packageId;";
 
-            var cards = new List<Card>();
+            var cards = new List<Cards>();
             using (var cmd = new NpgsqlCommand(query, conn))
             {
                 cmd.Parameters.AddWithValue("packageId", packageId);
@@ -458,7 +458,7 @@ namespace Trimmel_MCTG.db
 
                     while (reader.Read())
                     {
-                        cards.Add(new Card(
+                        cards.Add(new Cards(
                             reader.GetGuid(0),
                             reader.GetString(1),
                             reader.GetDouble(2),
@@ -535,7 +535,7 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public List<Card> GetBest4Cards(string username)
+        public List<Cards> GetBest4Cards(string username)
         {
             string query = @"
                 SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
@@ -545,7 +545,7 @@ namespace Trimmel_MCTG.db
                 WHERE u.username = @username
                 ORDER BY c.damage DESC
                 LIMIT 4;";
-            var bestCards = new List<Card>();
+            var bestCards = new List<Cards>();
 
             using (var cmd = new NpgsqlCommand(query, conn))
             {
@@ -555,7 +555,7 @@ namespace Trimmel_MCTG.db
                 {
                     while (reader.Read())
                     {
-                        bestCards.Add(new Card(
+                        bestCards.Add(new Cards(
                             reader.GetGuid(0),
                             reader.GetString(1),
                             reader.GetDouble(2),  // Falls Damage ein `double` ist
@@ -589,8 +589,6 @@ namespace Trimmel_MCTG.db
             }
         }
 
-
-
         public void DeleteDeckByUser(string username)
         {
             string query = @"
@@ -613,6 +611,40 @@ namespace Trimmel_MCTG.db
             }
         }
 
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public List<Cards> GetCardsByUsername(string username)
+        {
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM cards c
+                JOIN user_stacks us ON c.card_id = us.card_id
+                JOIN users u ON us.user_id = u.user_id
+                WHERE u.username = @username;";
+
+            List<Cards> cards = new List<Cards>();
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        cards.Add(new Cards(
+                            reader.GetGuid(0),
+                            reader.GetString(1),
+                            reader.GetDouble(2),
+                            reader.GetString(3),
+                            reader.GetString(4)
+                        ));
+                    }
+                }
+            }
+
+            return cards;
+        }
 
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

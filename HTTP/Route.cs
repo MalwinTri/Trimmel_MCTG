@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using MCTG_Trimmel.HTTP;
+using Newtonsoft.Json;
 using Trimmel_MCTG.Execute;
 
 namespace Trimmel_MCTG.HTTP
@@ -18,7 +19,8 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Post, "/users"), request => new RegisterExecuter(request) },
                 { (HttpMethod.Post, "/sessions"), request => new LoginExecuter(request) },
                 { (HttpMethod.Post, "/packages"), request => new CreatePackageExecuter(request) },
-                { (HttpMethod.Post, "/transactions/packages"), request => new AcquirePackage(request) }
+                { (HttpMethod.Post, "/transactions/packages"), request => new AcquirePackage(request) },
+                { (HttpMethod.Get, "/cards"), request => new ShowCardsExecuter(request) }
 
                 // Weitere Routen können hier hinzugefügt werden
             };
@@ -31,8 +33,20 @@ namespace Trimmel_MCTG.HTTP
                 throw new ArgumentNullException(nameof(request), "Request cannot be null.");
             }
 
+            // Überprüfe, ob die Route existiert
             if (routes.TryGetValue((request.Method, request.ResourcePath), out var routeHandler))
             {
+                // Token-Validierung nur für geschützte Routen
+                if (request.ResourcePath != "/users" && request.ResourcePath != "/sessions")
+                {
+                    if (string.IsNullOrEmpty(request.Token))
+                    {
+                        Console.WriteLine("Token is missing or invalid.");
+                        return new ErrorExecuter("Token is missing or invalid.", StatusCode.Unauthorized);
+                    }
+                }
+
+                // Routen-Handler ausführen
                 return routeHandler(request);
             }
 

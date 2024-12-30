@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Npgsql;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
+using Trimmel_MCTG.DB;
 
 namespace Trimmel_MCTG.Execute
 {
@@ -23,7 +24,7 @@ namespace Trimmel_MCTG.Execute
 
         public void SetDatabase(Database database)
         {
-            db = database; 
+            db = database;
         }
 
         public Response Execute()
@@ -45,8 +46,25 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Hol das nächste verfügbare Paket
-                var package = db.GetNextAvailablePackage();
+                // Paket außerhalb des try-Blocks deklarieren
+                Package package = null;
+
+                try
+                {
+                    // Hol das nächste verfügbare Paket
+                    package = db.GetNextAvailablePackage();
+                    if (package == null)
+                    {
+                        throw new Exception("No packages available in the database.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during AcquirePackage execution: {ex.Message}");
+                    throw; // Optional: Wirf die Exception weiter
+                }
+
+                // Überprüfen, ob ein gültiges Paket gefunden wurde
                 if (package == null)
                 {
                     response.Payload = "No packages available.";
@@ -67,8 +85,6 @@ namespace Trimmel_MCTG.Execute
                 // Lösche das Paket
                 db.DeletePackage(package.PackageId);
 
-                // Optional: Beste Karten in Deck einfügen
-                db.DeleteDeckByUser(username);
                 var bestCards = db.GetBest4Cards(username);
 
                 // Überprüfen Sie, ob mindestens 4 Karten verfügbar sind

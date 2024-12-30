@@ -3,7 +3,7 @@ using System;
 
 namespace Trimmel_MCTG.DB
 {
-    public class Card
+    public class Cards
     {
         [JsonProperty("Id")]
         public Guid CardId { get; set; } 
@@ -15,7 +15,7 @@ namespace Trimmel_MCTG.DB
         public string CardType { get; set; }
 
 
-        public Card(Guid cardId, string name, double damage, string elementType, string cardType)
+        public Cards(Guid cardId, string name, double damage, string elementType, string cardType)
         {
             CardId = cardId;
             Name = name;

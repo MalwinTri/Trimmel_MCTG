@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Trimmel_MCTG.DB
 {
-    public class User
+    public class Users
     {
         public int UserId { get; set; }
         public string ?Username { get; set; }
@@ -14,7 +14,7 @@ namespace Trimmel_MCTG.DB
         public int Coins { get; set; } = 20; 
         public string Token => $"{Username}-msgToken";
 
-        public Deck Deck
+        public Decks Deck
         {
             get => default;
             set

@@ -7,7 +7,7 @@
         public Guid CardId { get; set; }            // <-- statt int
 
         public Package? Package { get; set; }             // Verknüpftes Paket
-        public Card? Card { get; set; }                   // Verknüpfte Karte
+        public Cards? Card { get; set; }                   // Verknüpfte Karte
 
         // Konstruktoren
         public PackageCard() { }

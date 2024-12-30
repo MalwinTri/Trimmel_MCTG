@@ -13,11 +13,11 @@ namespace Trimmel_MCTG.DB
         public int User2Id { get; set; }
         public int WinnerId { get; set; }
 
-        public User ?User1 { get; set; } 
-        public User ?User2 { get; set; } 
-        public User ?Winner { get; set; }
+        public Users ?User1 { get; set; } 
+        public Users ?User2 { get; set; } 
+        public Users ?Winner { get; set; }
 
-        public User User
+        public Users User
         {
             get => default;
             set
