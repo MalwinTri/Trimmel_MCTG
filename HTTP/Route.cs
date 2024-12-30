@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Trimmel_MCTG.Execute;
 
 namespace Trimmel_MCTG.HTTP
 {
@@ -16,7 +17,8 @@ namespace Trimmel_MCTG.HTTP
             {
                 { (HttpMethod.Post, "/users"), request => new RegisterExecuter(request) },
                 { (HttpMethod.Post, "/sessions"), request => new LoginExecuter(request) },
-                { (HttpMethod.Post, "/packages"), request => new CreatePackageExecuter(request) }
+                { (HttpMethod.Post, "/packages"), request => new CreatePackageExecuter(request) },
+                { (HttpMethod.Post, "/transactions/packages"), request => new AcquirePackage(request) }
 
                 // Weitere Routen können hier hinzugefügt werden
             };

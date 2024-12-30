@@ -458,20 +458,163 @@ namespace Trimmel_MCTG.db
 
                     while (reader.Read())
                     {
-                        cards.Add(new Card
-                        {
-                            CardId = reader.GetGuid(0),
-                            Name = reader.GetString(1),
-                            Damage = reader.GetInt32(2),
-                            ElementType = reader.GetString(3),
-                            CardType = reader.GetString(4)
-                        });
+                        cards.Add(new Card(
+                            reader.GetGuid(0),
+                            reader.GetString(1),
+                            reader.GetDouble(2),
+                            reader.GetString(3),
+                            reader.GetString(4)
+                        ));
                     }
                 }
             }
             return cards;
         }
 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public int GetUserCoins(string username)
+        {
+            string query = "SELECT coins FROM users WHERE username = @username;";
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+                return (int)cmd.ExecuteScalar();
+            }
+        }
+
+        public Package? GetNextAvailablePackage()
+        {
+            string query = "SELECT package_id, price FROM packages ORDER BY package_id LIMIT 1;";
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        int packageId = reader.GetInt32(0);
+                        int price = reader.GetInt32(1);
+                        return new Package(packageId, price); // Geben Sie die Parameter an
+                    }
+                }
+            }
+            return null;
+        }
+
+        public void AssignCardToUser(string username, Guid cardId)
+        {
+            string query = @"
+                INSERT INTO user_stacks (user_id, card_id) 
+                SELECT user_id, @cardId FROM users WHERE username = @username;";
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+                cmd.Parameters.AddWithValue("cardId", cardId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void UpdateUserCoins(string username, int newCoins)
+        {
+            string query = "UPDATE users SET coins = @newCoins WHERE username = @username;";
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+                cmd.Parameters.AddWithValue("newCoins", newCoins);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void DeletePackage(int packageId)
+        {
+            string query = "DELETE FROM packages WHERE package_id = @packageId;";
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("packageId", packageId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public List<Card> GetBest4Cards(string username)
+        {
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM user_stacks us
+                JOIN cards c ON us.card_id = c.card_id
+                JOIN users u ON us.user_id = u.user_id
+                WHERE u.username = @username
+                ORDER BY c.damage DESC
+                LIMIT 4;";
+            var bestCards = new List<Card>();
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        bestCards.Add(new Card(
+                            reader.GetGuid(0),
+                            reader.GetString(1),
+                            reader.GetDouble(2),  // Falls Damage ein `double` ist
+                            reader.GetString(3),
+                            reader.GetString(4)
+                        ));
+                    }
+                }
+            }
+            return bestCards;
+        }
+
+
+        public void InsertIntoDeck(Guid card1Id, Guid card2Id, Guid card3Id, Guid card4Id, string username)
+        {
+            string query = @"
+                INSERT INTO decks (user_id, card_1_id, card_2_id, card_3_id, card_4_id)
+                VALUES (
+                    (SELECT user_id FROM users WHERE username = @username),
+                    @card1Id, @card2Id, @card3Id, @card4Id);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+                cmd.Parameters.AddWithValue("card1Id", card1Id);
+                cmd.Parameters.AddWithValue("card2Id", card2Id);
+                cmd.Parameters.AddWithValue("card3Id", card3Id);
+                cmd.Parameters.AddWithValue("card4Id", card4Id);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+
+
+        public void DeleteDeckByUser(string username)
+        {
+            string query = @"
+                DELETE FROM decks
+                WHERE user_id = (SELECT user_id FROM users WHERE username = @username);";
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("username", username);
+                    int rowsAffected = cmd.ExecuteNonQuery();
+                    Console.WriteLine($"{rowsAffected} deck(s) deleted for user {username}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting deck for user {username}: {ex.Message}");
+                throw;
+            }
+        }
+
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         public void Dispose()
         {
