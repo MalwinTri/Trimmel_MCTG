@@ -11,11 +11,20 @@ namespace Trimmel_MCTG.DB
         public int TradeId { get; set; }
         public int UserId { get; set; }
         public int OfferedCardId { get; set; }
-        public CardType RequiredType { get; set; } 
+        public string CardType { get; set; } // Ändern von Enum auf string
+
         public int MinDamage { get; set; }
 
         public User ?User { get; set; } 
-        public Card ?OfferedCard { get; set; } 
+        public Card ?OfferedCard { get; set; }
+
+        public db.Database Database
+        {
+            get => default;
+            set
+            {
+            }
+        }
     }
 
 }

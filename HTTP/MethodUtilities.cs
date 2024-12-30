@@ -34,6 +34,14 @@ namespace Trimmel_MCTG.HTTP
     
     public static class MethodUtilities
     {
+        public static MCTG_Trimmel.HTTP.Response Response
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         // Methode zur Bestimmung der HTTP-Methode aus einem String
         public static HttpMethod GetMethod(string method)
         {

@@ -1,7 +1,4 @@
-﻿using BCrypt.Net;
-using Npgsql;
-using System;
-using System.Collections.Generic;
+﻿using Npgsql;
 using Trimmel_MCTG.DB;
 
 namespace Trimmel_MCTG.db
@@ -10,7 +7,7 @@ namespace Trimmel_MCTG.db
     {
         private readonly NpgsqlConnection conn;
         // Connection String 
-        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=#;Database=mctg_trimmel";
+        private readonly string connectionString = "Host=localhost;Port=5432;Username=postgres;Password=a4gq4heU2cF*;Database=mctg_trimmel";
 
         public Database()
         {
@@ -27,74 +24,83 @@ namespace Trimmel_MCTG.db
             }
         }
 
+        public LoginExecuter LoginExecuter
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public RegisterExecuter RegisterExecuter
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+
         public void CreateTables()
         {
             string createTablesCommand = @"
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id SERIAL PRIMARY KEY,
-                    username VARCHAR(50) NOT NULL UNIQUE,
-                    password VARCHAR(255) NOT NULL,
-                    coins INT DEFAULT 20,
-                    token VARCHAR(255) UNIQUE
-                );
+        CREATE TABLE IF NOT EXISTS users (
+            user_id SERIAL PRIMARY KEY,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            coins INT DEFAULT 20,
+            token VARCHAR(255) UNIQUE
+        );
 
-                CREATE TABLE IF NOT EXISTS user_stats (
-                    user_id INT PRIMARY KEY,
-                    wins INT DEFAULT 0,
-                    losses INT DEFAULT 0,
-                    elo INT DEFAULT 1000,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-                );
+        CREATE TABLE IF NOT EXISTS cards (
+            card_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            name VARCHAR(100) NOT NULL,
+            damage INT NOT NULL,
+            element_type VARCHAR(50) NOT NULL,
+            card_type VARCHAR(50) NOT NULL CHECK (card_type IN ('spell', 'monster'))
+        );
 
-                CREATE TABLE IF NOT EXISTS cards (
-                    card_id SERIAL PRIMARY KEY,
-                    name VARCHAR(100) NOT NULL,
-                    damage INT NOT NULL,
-                    element_type VARCHAR(50) NOT NULL,
-                    card_type VARCHAR(50) NOT NULL CHECK (card_type IN ('spell', 'monster'))
-                );
+        CREATE TABLE IF NOT EXISTS user_stacks (
+            user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+            card_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
+            in_deck BOOLEAN DEFAULT FALSE,
+            PRIMARY KEY (user_id, card_id)
+        );
 
-                CREATE TABLE IF NOT EXISTS user_stacks (
-                    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
-                    card_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
-                    in_deck BOOLEAN DEFAULT FALSE,
-                    PRIMARY KEY (user_id, card_id)
-                );
+        CREATE TABLE IF NOT EXISTS packages (
+            package_id SERIAL PRIMARY KEY,
+            price INT DEFAULT 5
+        );
 
-                CREATE TABLE IF NOT EXISTS packages (
-                    package_id SERIAL PRIMARY KEY,
-                    price INT DEFAULT 5
-                );
+        CREATE TABLE IF NOT EXISTS packageCards (
+            package_id INT REFERENCES packages(package_id) ON DELETE CASCADE,
+            card_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
+            PRIMARY KEY (package_id, card_id)
+        );
 
-                CREATE TABLE IF NOT EXISTS package_cards (
-                    package_id INT REFERENCES packages(package_id) ON DELETE CASCADE,
-                    card_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
-                    PRIMARY KEY (package_id, card_id)
-                );
+        CREATE TABLE IF NOT EXISTS decks (
+            deck_id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+            card_1_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
+            card_2_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
+            card_3_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
+            card_4_id UUID REFERENCES cards(card_id) ON DELETE CASCADE
+        );
 
-                CREATE TABLE IF NOT EXISTS decks (
-                    deck_id SERIAL PRIMARY KEY,
-                    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
-                    card_1_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
-                    card_2_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
-                    card_3_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
-                    card_4_id INT REFERENCES cards(card_id) ON DELETE CASCADE
-                );
+        CREATE TABLE IF NOT EXISTS battles (
+            battle_id SERIAL PRIMARY KEY,
+            user_1_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+            user_2_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+            winner_id INT REFERENCES users(user_id)
+        );
 
-                CREATE TABLE IF NOT EXISTS battles (
-                    battle_id SERIAL PRIMARY KEY,
-                    user_1_id INT REFERENCES users(user_id) ON DELETE CASCADE,
-                    user_2_id INT REFERENCES users(user_id) ON DELETE CASCADE,
-                    winner_id INT REFERENCES users(user_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS trades (
-                    trade_id SERIAL PRIMARY KEY,
-                    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
-                    offered_card_id INT REFERENCES cards(card_id) ON DELETE CASCADE,
-                    required_type VARCHAR(50) NOT NULL CHECK (required_type IN ('spell', 'monster')),
-                    min_damage INT
-                );";
+        CREATE TABLE IF NOT EXISTS trades (
+            trade_id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+            offered_card_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
+            required_type VARCHAR(50) NOT NULL CHECK (required_type IN ('spell', 'monster')),
+            min_damage INT
+        );";
 
             try
             {
@@ -110,6 +116,7 @@ namespace Trimmel_MCTG.db
             }
         }
 
+
         // Funktioniert eigentlich nicht. Erst am Ende wenn alles implementiert ist
         public void DropTables()
         {
@@ -117,7 +124,7 @@ namespace Trimmel_MCTG.db
                 DROP TABLE IF EXISTS trades;
                 DROP TABLE IF EXISTS battles;
                 DROP TABLE IF EXISTS decks;
-                DROP TABLE IF EXISTS package_cards;
+                DROP TABLE IF EXISTS packageCards;
                 DROP TABLE IF EXISTS packages;
                 DROP TABLE IF EXISTS user_stacks;
                 DROP TABLE IF EXISTS cards;
@@ -186,7 +193,7 @@ namespace Trimmel_MCTG.db
                     // Füge die Parameter für den SQL-Befehl hinzu
                     cmd.Parameters.AddWithValue("username", user.Username);
                     cmd.Parameters.AddWithValue("password", hashedPassword);
-                    cmd.Parameters.AddWithValue("coins", 20); 
+                    cmd.Parameters.AddWithValue("coins", 20);
                     cmd.Parameters.AddWithValue("token", userToken);
 
                     // Führe den SQL-Befehl aus und speichere die Anzahl der betroffenen Zeilen
@@ -314,6 +321,157 @@ namespace Trimmel_MCTG.db
                 return false;
             }
         }
+
+        public int InsertPackage()
+        {
+            string query = "INSERT INTO packages (price) VALUES (5) RETURNING package_id;";
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    return (int)cmd.ExecuteScalar();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inserting package: {ex.Message}");
+                throw;
+            }
+        }
+
+        public void InsertCard(Card card)
+        {
+            // Prüfen, ob die Karte schon existiert
+            string checkQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
+            using (var checkCmd = new NpgsqlCommand(checkQuery, conn))
+            {
+                checkCmd.Parameters.AddWithValue("cardId", card.CardId);
+                var count = (long)checkCmd.ExecuteScalar();
+                if (count > 0)
+                {
+                    // Statt Exception werfen -> einfach überspringen
+                    Console.WriteLine($"[InsertCard] Card with ID {card.CardId} already exists. Skipping insert...");
+                    return;
+                }
+            }
+
+            // Karte noch nicht in DB -> jetzt einfügen
+            string query = @"
+                INSERT INTO cards (card_id, name, damage, element_type, card_type)
+                VALUES (@cardId, @name, @damage, @elementType, @cardType);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("cardId", card.CardId);
+                cmd.Parameters.AddWithValue("name", card.Name);
+                cmd.Parameters.AddWithValue("damage", card.Damage);
+                cmd.Parameters.AddWithValue("elementType", card.ElementType);
+                cmd.Parameters.AddWithValue("cardType", card.CardType);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+
+        public void InsertCardWithoutId(Card card)
+        {
+            string query = @"
+                INSERT INTO cards (name, damage, element_type, card_type)
+                VALUES (@name, @damage, @elementType, @cardType);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("name", card.Name);
+                cmd.Parameters.AddWithValue("damage", card.Damage);
+                cmd.Parameters.AddWithValue("elementType", card.ElementType);
+                cmd.Parameters.AddWithValue("cardType", card.CardType);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+
+        public void LinkCardToPackage(int packageId, Guid cardId)
+        {
+            // 1) Prüfen, ob Karte existiert
+            string checkCardQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
+            using (var checkCmd = new NpgsqlCommand(checkCardQuery, conn))
+            {
+                checkCmd.Parameters.AddWithValue("cardId", cardId);
+                var count = (long)checkCmd.ExecuteScalar();
+                if (count == 0)
+                {
+                    Console.WriteLine($"Card with ID {cardId} does not exist in 'cards'.");
+                    return;
+                }
+            }
+
+            // 2) Prüfen, ob (package_id, card_id) schon in packageCards vorhanden
+            string checkPackageCardsQuery = "SELECT COUNT(*) FROM packageCards WHERE package_id = @packageId AND card_id = @cardId;";
+            using (var checkCmd = new NpgsqlCommand(checkPackageCardsQuery, conn))
+            {
+                checkCmd.Parameters.AddWithValue("packageId", packageId);
+                checkCmd.Parameters.AddWithValue("cardId", cardId);
+                var count = (long)checkCmd.ExecuteScalar();
+                if (count > 0)
+                {
+                    // Already linked -> optional: skip or error out
+                    Console.WriteLine($"(package_id, card_id) = ({packageId}, {cardId}) already exists. Skipping link...");
+                    return;
+                }
+            }
+
+            // 3) Verknüpfung einfügen
+            string query = @"
+                INSERT INTO packageCards (package_id, card_id)
+                VALUES (@packageId, @cardId);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("packageId", packageId);
+                cmd.Parameters.AddWithValue("cardId", cardId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+
+
+        public List<Card> GetCardsByPackageId(int packageId)
+        {
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM cards c
+                INNER JOIN packageCards pc ON c.card_id = pc.card_id
+                WHERE pc.package_id = @packageId;";
+
+            var cards = new List<Card>();
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("packageId", packageId);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (!reader.HasRows)
+                    {
+                        Console.WriteLine($"No cards found for package ID {packageId}");
+                        return cards;
+                    }
+
+                    while (reader.Read())
+                    {
+                        cards.Add(new Card
+                        {
+                            CardId = reader.GetGuid(0),
+                            Name = reader.GetString(1),
+                            Damage = reader.GetInt32(2),
+                            ElementType = reader.GetString(3),
+                            CardType = reader.GetString(4)
+                        });
+                    }
+                }
+            }
+            return cards;
+        }
+
 
         public void Dispose()
         {

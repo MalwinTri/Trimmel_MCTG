@@ -27,6 +27,14 @@ namespace Trimmel_MCTG.HTTP
             db = new Database(); // Erstellen einer einzigen gemeinsamen Datenbankverbindung
         }
 
+        public HttpMethod HttpMethod
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         public void Start()
         {
             try

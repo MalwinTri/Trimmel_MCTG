@@ -25,6 +25,22 @@ public class RegisterExecuter : IRouteCommand
         user = JsonConvert.DeserializeObject<User>(requestContext.Payload) ?? throw new InvalidDataException("Invalid user data in the payload.");
     }
 
+    public IRoute IRoute
+    {
+        get => default;
+        set
+        {
+        }
+    }
+
+    public Trimmel_MCTG.hash.PasswordHasher PasswordHasher
+    {
+        get => default;
+        set
+        {
+        }
+    }
+
     public void SetDatabase(Database db)
     {
         // Setze die Datenbankinstanz und prüfe, ob diese nicht null ist

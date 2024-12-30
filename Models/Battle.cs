@@ -15,7 +15,23 @@ namespace Trimmel_MCTG.DB
 
         public User ?User1 { get; set; } 
         public User ?User2 { get; set; } 
-        public User ?Winner { get; set; } 
+        public User ?Winner { get; set; }
+
+        public User User
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public db.Database Database
+        {
+            get => default;
+            set
+            {
+            }
+        }
     }
 
 }

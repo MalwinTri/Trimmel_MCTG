@@ -13,5 +13,21 @@ namespace MCTG_Trimmel.HTTP
 
         // Der Payload der Antwort - die eigentlichen Daten, die im Body der Antwort enthalten sind
         public string? Payload { get; set; }
+
+        public Trimmel_MCTG.HTTP.IRoute IRoute
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public Trimmel_MCTG.HTTP.HttpClient HttpClient
+        {
+            get => default;
+            set
+            {
+            }
+        }
     }
 }

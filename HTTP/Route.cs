@@ -1,7 +1,4 @@
 ﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using Trimmel_MCTG.HTTP;
 
 namespace Trimmel_MCTG.HTTP
 {
@@ -10,6 +7,8 @@ namespace Trimmel_MCTG.HTTP
         // Dictionary zur Routenverwaltung
         private readonly Dictionary<(HttpMethod method, string resourcePath), Func<RequestContext, IRouteCommand>> routes;
 
+        Route IRoute.Route { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
         public Route()
         {
             // Initialisiere alle bekannten Routen
@@ -17,6 +16,8 @@ namespace Trimmel_MCTG.HTTP
             {
                 { (HttpMethod.Post, "/users"), request => new RegisterExecuter(request) },
                 { (HttpMethod.Post, "/sessions"), request => new LoginExecuter(request) },
+                { (HttpMethod.Post, "/packages"), request => new CreatePackageExecuter(request) }
+
                 // Weitere Routen können hier hinzugefügt werden
             };
         }
@@ -61,6 +62,11 @@ namespace Trimmel_MCTG.HTTP
                 throw new InvalidDataException("Failed to deserialize request body.");
             }
             return data;
+        }
+
+        IRouteCommand? IRoute.Resolve(RequestContext request)
+        {
+            throw new NotImplementedException();
         }
     }
 }

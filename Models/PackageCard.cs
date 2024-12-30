@@ -1,18 +1,27 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Trimmel_MCTG.DB
+﻿namespace Trimmel_MCTG.DB
 {
     public class PackageCard
     {
+        // Eigenschaften
         public int PackageId { get; set; }
-        public int CardId { get; set; }
+        public Guid CardId { get; set; }            // <-- statt int
 
-        public Package ?Package { get; set; } 
-        public Card ?Card { get; set; } 
+        public Package? Package { get; set; }             // Verknüpftes Paket
+        public Card? Card { get; set; }                   // Verknüpfte Karte
+
+        // Konstruktoren
+        public PackageCard() { }
+
+        public PackageCard(int packageId, Guid cardId)
+        {
+            PackageId = packageId;
+            CardId = cardId;
+        }
+
+        // Methode zur Ausgabe der Paketkarteninformationen
+        public override string ToString()
+        {
+            return $"Package ID: {PackageId}, Card ID: {CardId}";
+        }
     }
-
 }

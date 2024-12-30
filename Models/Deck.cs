@@ -19,7 +19,15 @@ namespace Trimmel_MCTG.DB
         public Card ?Card1 { get; set; } 
         public Card ?Card2 { get; set; } 
         public Card ?Card3 { get; set; } 
-        public Card ?Card4 { get; set; } 
+        public Card ?Card4 { get; set; }
+
+        public db.Database Database
+        {
+            get => default;
+            set
+            {
+            }
+        }
     }
 
 }

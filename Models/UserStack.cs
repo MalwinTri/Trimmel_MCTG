@@ -13,7 +13,23 @@ namespace Trimmel_MCTG.DB
         public bool InDeck { get; set; } = false;
 
         public User ?User { get; set; } 
-        public Card ?Card { get; set; } 
+        public Card ?Card { get; set; }
+
+        public Deck Deck
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public db.Database Database
+        {
+            get => default;
+            set
+            {
+            }
+        }
     }
 
 }

@@ -1,6 +1,9 @@
-﻿using MCTG_Trimmel.HTTP;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using MCTG_Trimmel.HTTP;
 
 namespace Trimmel_MCTG.HTTP
 {
@@ -12,6 +15,14 @@ namespace Trimmel_MCTG.HTTP
         {
             // Initialisiert die TCP-Verbindung für den Client
             this.connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        }
+
+        public HttpMethod HttpMethod
+        {
+            get => default;
+            set
+            {
+            }
         }
 
         public RequestContext? ReceiveRequest()
@@ -94,18 +105,26 @@ namespace Trimmel_MCTG.HTTP
                     var methodString = parts[0];
                     var path = parts[1];
 
+                    // Headers verarbeiten
+                    var headers = new Dictionary<string, string>();
+                    int i = 1;
+                    while (!string.IsNullOrWhiteSpace(lines[i]))
+                    {
+                        var headerParts = lines[i].Split(':', 2);
+                        if (headerParts.Length == 2)
+                        {
+                            headers[headerParts[0].Trim()] = headerParts[1].Trim();
+                        }
+                        i++;
+                    }
+
                     // Prüfe, ob die Methode ein gültiges HttpMethod-Enum ist
                     if (Enum.TryParse<HttpMethod>(methodString, true, out var method))
                     {
                         // Angenommen, dass POST-Anfragen einen Body haben, der nach einer Leerzeile kommt
-                        var body = lines.LastOrDefault();
+                        var body = lines.Skip(i + 1).FirstOrDefault();
 
-                        return new RequestContext
-                        {
-                            Method = method,
-                            ResourcePath = path,
-                            Payload = body
-                        };
+                        return new RequestContext(headers, body, method, path);
                     }
                 }
             }

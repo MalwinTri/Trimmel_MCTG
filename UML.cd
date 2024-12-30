@@ -1,0 +1,245 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Class Name="Trimmel_MCTG.db.Database" BaseTypeListCollapsed="true">
+    <Position X="12.25" Y="7.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>ABAAAAAAASAAAAgABAEAAQAAAAQACQAAAAAAEAABAAA=</HashCode>
+      <FileName>db\database.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="LoginExecuter" />
+      <Property Name="RegisterExecuter" />
+    </ShowAsAssociation>
+    <Lollipop Position="0.2" Collapsed="true" />
+  </Class>
+  <Class Name="LoginExecuter" BaseTypeListCollapsed="true">
+    <Position X="11.25" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BAAAAAAAAAAQAAQAAAEAAAAAAAAAAAAAAAAAAAAAAUA=</HashCode>
+      <FileName>Execute\LoginExecuter.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="IRoute" />
+    </ShowAsAssociation>
+    <Lollipop Position="0.2" Collapsed="true" />
+  </Class>
+  <Class Name="RegisterExecuter" BaseTypeListCollapsed="true">
+    <Position X="13.25" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BAAAAAAAAAAQAAQAAAEAAAAAAEAAAAAAAAAAAAAAAUA=</HashCode>
+      <FileName>Execute\RegisterExecuter.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="IRoute" />
+      <Property Name="PasswordHasher" />
+    </ShowAsAssociation>
+    <Lollipop Position="0.2" Collapsed="true" />
+  </Class>
+  <Class Name="Trimmel_MCTG.hash.PasswordHasher">
+    <Position X="15.5" Y="5.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAEAAAAAAACAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>hash\PasswordHasher.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="Trimmel_MCTG.HTTP.HttpClient">
+    <Position X="6" Y="1.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAABAAAAAACAAAAIIBAAAAAAAAAAAAAAgAAAAAAAA=</HashCode>
+      <FileName>HTTP\HttpClient.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="HttpMethod" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.HTTP.HttpServer">
+    <Position X="2" Y="0.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AgAAAAAAACAQAAAAAIAAAABAAIAAAAAAIAAAEAAAAAA=</HashCode>
+      <FileName>HTTP\HttpServer.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="HttpMethod" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.HTTP.MethodUtilities">
+    <Position X="14" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>HTTP\MethodUtilities.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Response" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.HTTP.RequestContext">
+    <Position X="14" Y="2" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BAAAAABAAAAAAAAAAAEwAAAQAAAAAAAAAAAAAAQBAAA=</HashCode>
+      <FileName>HTTP\RequestContext.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="IRoute" />
+      <Property Name="IRouteCommand" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.HTTP.Route" BaseTypeListCollapsed="true">
+    <Position X="10.5" Y="2" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAACAAAAAAAAAAABAAABAAAAAAAAAEAAAAAA=</HashCode>
+      <FileName>HTTP\Route.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.142" Collapsed="true" />
+  </Class>
+  <Class Name="MCTG_Trimmel.HTTP.Response">
+    <Position X="12.25" Y="1.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAEQAAAACAAAAAAAIAAAAAAAAAA=</HashCode>
+      <FileName>HTTP\Response.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="IRoute" />
+      <Property Name="HttpClient" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.Battle">
+    <Position X="6" Y="13.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAABAAAAQEAAAEAEIACAAAACAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\Battle.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="User" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.Card">
+    <Position X="4" Y="7.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABACAAEAAAAAAAAAAAAQAAAgAAAAAAABAAAgAAAA=</HashCode>
+      <FileName>Models\Card.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="CardType1" />
+      <Property Name="Deck" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.Deck">
+    <Position X="6" Y="7.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>ABABAAAAAEAACAAAAACAAAiAQACAAAEAAAAAAAAIBAA=</HashCode>
+      <FileName>Models\Deck.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.Package">
+    <Position X="8" Y="12.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AACAAAAAAUAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\Package.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="PackageCard" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.PackageCard">
+    <Position X="8" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AADAAAAAAEAAAAAAAAAQAAAAAAAAAAIAAAAAAAgAAAA=</HashCode>
+      <FileName>Models\PackageCard.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Trade" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.Trade">
+    <Position X="8" Y="7.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAABAACAAEAACAAAAAAAAggAAAACACAAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\Trade.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.User">
+    <Position X="6" Y="11" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AgAAAAAAAEAAAAABAQAACAgAAAAAAAICAABAAAABAAA=</HashCode>
+      <FileName>Models\User.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Deck" />
+      <Property Name="UserStack" />
+      <Property Name="UserStats" />
+      <Property Name="Trade" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.UserStack">
+    <Position X="4" Y="10.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AABBAAAAAEAAAAAAAAACAAgAAAAAAAAAAABAAAgAAAA=</HashCode>
+      <FileName>Models\UserStack.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Deck" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="Trimmel_MCTG.DB.UserStats">
+    <Position X="4" Y="12.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAABAAAAAEAgAAAAAAAACAgAAAAAAAAgAAAIAAAAAAA=</HashCode>
+      <FileName>Models\UserStats.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Battle" />
+      <Property Name="Database" />
+    </ShowAsAssociation>
+  </Class>
+  <Interface Name="Trimmel_MCTG.HTTP.IRoute">
+    <Position X="12.25" Y="3" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAACAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>HTTP\IRoute.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="Route" />
+    </ShowAsAssociation>
+  </Interface>
+  <Interface Name="Trimmel_MCTG.HTTP.IRouteCommand">
+    <Position X="15.75" Y="2.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>HTTP\IRouteCommand.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Enum Name="Trimmel_MCTG.HTTP.HttpMethod">
+    <Position X="4.25" Y="1.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAABAAAAAAAAACAEAQAAAAAAAAAAAAAg=</HashCode>
+      <FileName>HTTP\MethodUtilities.cs</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Enum Name="MCTG_Trimmel.HTTP.StatusCode">
+    <Position X="8.75" Y="2" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>CAEAQAAIAAAAAAAgAAEAAAAAAAEAAAQAACABAAAEAAA=</HashCode>
+      <FileName>HTTP\StatusCode.cs</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Enum Name="Trimmel_MCTG.DB.CardType">
+    <Position X="2" Y="8" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAgAAAAAAAAA=</HashCode>
+      <FileName>Models\Card.cs</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>
