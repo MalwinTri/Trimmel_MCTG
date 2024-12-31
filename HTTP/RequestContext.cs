@@ -37,6 +37,28 @@ namespace Trimmel_MCTG.HTTP
             }
         }
 
+        // Query-Parameter als Dictionary
+        public Dictionary<string, string> QueryParameters
+        {
+            get
+            {
+                var queryParams = new Dictionary<string, string>();
+                if (ResourcePath.Contains("?"))
+                {
+                    var query = ResourcePath.Split('?')[1]; // Alles nach dem '?' extrahieren
+                    foreach (var param in query.Split('&'))
+                    {
+                        var keyValue = param.Split('=');
+                        if (keyValue.Length == 2)
+                        {
+                            queryParams[keyValue[0]] = keyValue[1];
+                        }
+                    }
+                }
+                return queryParams;
+            }
+        }
+
         public RequestContext(Dictionary<string, string> headers, string? payload, HttpMethod method, string resourcePath)
         {
             Headers = headers;
@@ -46,4 +68,3 @@ namespace Trimmel_MCTG.HTTP
         }
     }
 }
-    

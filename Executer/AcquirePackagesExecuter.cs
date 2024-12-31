@@ -34,7 +34,14 @@ namespace Trimmel_MCTG.Execute
             try
             {
                 // Extrahiere Benutzername aus Token
-                string[] tokenParts = requestContext.Token.Split('-');
+                string[] tokenParts = requestContext.Token?.Split('-') ?? Array.Empty<string>();
+                if (tokenParts.Length == 0 || string.IsNullOrEmpty(tokenParts[0]))
+                {
+                    response.StatusCode = StatusCode.Unauthorized; // 401 Unauthorized
+                    response.Payload = "Authorization token is invalid or missing.";
+                    return response;
+                }
+
                 string username = tokenParts[0];
 
                 // Überprüfe, ob Benutzer genug Coins hat
@@ -42,33 +49,16 @@ namespace Trimmel_MCTG.Execute
                 if (userCoins < 5)
                 {
                     response.Payload = "Not enough coins to acquire a package.";
-                    response.StatusCode = StatusCode.BadRequest;
+                    response.StatusCode = StatusCode.BadRequest; // 400 Bad Request
                     return response;
                 }
 
-                // Paket außerhalb des try-Blocks deklarieren
-                Package package = null;
-
-                try
-                {
-                    // Hol das nächste verfügbare Paket
-                    package = db.GetNextAvailablePackage();
-                    if (package == null)
-                    {
-                        throw new Exception("No packages available in the database.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error during AcquirePackage execution: {ex.Message}");
-                    throw; // Optional: Wirf die Exception weiter
-                }
-
-                // Überprüfen, ob ein gültiges Paket gefunden wurde
+                // Hol das nächste verfügbare Paket
+                var package = db.GetNextAvailablePackage();
                 if (package == null)
                 {
                     response.Payload = "No packages available.";
-                    response.StatusCode = StatusCode.BadRequest;
+                    response.StatusCode = StatusCode.NotFound; // 404 Not Found
                     return response;
                 }
 
@@ -85,35 +75,44 @@ namespace Trimmel_MCTG.Execute
                 // Lösche das Paket
                 db.DeletePackage(package.PackageId);
 
+                // Deck aktualisieren, falls genügend Karten vorhanden
                 var bestCards = db.GetBest4Cards(username);
-
-                // Überprüfen Sie, ob mindestens 4 Karten verfügbar sind
                 if (bestCards.Count >= 4)
                 {
                     db.InsertIntoDeck(
-                        bestCards[0].CardId, // Erste Karte
-                        bestCards[1].CardId, // Zweite Karte
-                        bestCards[2].CardId, // Dritte Karte
-                        bestCards[3].CardId, // Vierte Karte
-                        username             // Benutzername
+                        bestCards[0].CardId,
+                        bestCards[1].CardId,
+                        bestCards[2].CardId,
+                        bestCards[3].CardId,
+                        username
                     );
                 }
                 else
                 {
-                    // Fehlerfall: Weniger als 4 Karten verfügbar
                     Console.WriteLine("Not enough cards to form a deck.");
                 }
 
                 response.Payload = $"Package acquired successfully for user: {username}";
-                response.StatusCode = StatusCode.Ok;
+                response.StatusCode = StatusCode.Created; // 201 Created
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                response.Payload = $"Unauthorized access: {ex.Message}";
+                response.StatusCode = StatusCode.Unauthorized; // 401 Unauthorized
+            }
+            catch (KeyNotFoundException ex)
+            {
+                response.Payload = $"Data not found: {ex.Message}";
+                response.StatusCode = StatusCode.NotFound; // 404 Not Found
             }
             catch (Exception ex)
             {
-                response.Payload = $"An error occurred: {ex.Message}";
-                response.StatusCode = StatusCode.InternalServerError;
+                response.Payload = $"An internal error occurred: {ex.Message}";
+                response.StatusCode = StatusCode.InternalServerError; // 500 Internal Server Error
             }
 
             return response;
         }
+
     }
 }

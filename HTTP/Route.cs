@@ -20,7 +20,9 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Post, "/sessions"), request => new LoginExecuter(request) },
                 { (HttpMethod.Post, "/packages"), request => new CreatePackageExecuter(request) },
                 { (HttpMethod.Post, "/transactions/packages"), request => new AcquirePackage(request) },
-                { (HttpMethod.Get, "/cards"), request => new ShowCardsExecuter(request) }
+                { (HttpMethod.Get, "/cards"), request => new ShowCardsExecuter(request) },
+                { (HttpMethod.Get, "/deck"), request => new ShowDecksExecuter(request) },
+                { (HttpMethod.Put, "/deck"), request => new ShowDecksExecuter(request) },
 
                 // Weitere Routen können hier hinzugefügt werden
             };
@@ -33,11 +35,33 @@ namespace Trimmel_MCTG.HTTP
                 throw new ArgumentNullException(nameof(request), "Request cannot be null.");
             }
 
-            // Überprüfe, ob die Route existiert
-            if (routes.TryGetValue((request.Method, request.ResourcePath), out var routeHandler))
+            // Entferne Query-Parameter vom ResourcePath
+            var cleanResourcePath = request.ResourcePath.Split('?')[0];
+
+            // Spezialfall für Benutzerpfade (mit Platzhalter)
+            if (cleanResourcePath.StartsWith("/users/"))
+            {
+                var parts = cleanResourcePath.Split('/');
+                if (parts.Length == 3) // Pfad hat das Format /users/{username}
+                {
+                    var username = parts[2]; // Extrahiere den Benutzernamen
+
+                    if (request.Method == HttpMethod.Get)
+                    {
+                        return new GetUserDataExecuter(request, username);
+                    }
+                    else if (request.Method == HttpMethod.Put)
+                    {
+                        return new UpdateUserDataExecuter(request, username);
+                    }
+                }
+            }
+
+            // Überprüfe, ob die Route existiert (ohne Platzhalter)
+            if (routes.TryGetValue((request.Method, cleanResourcePath), out var routeHandler))
             {
                 // Token-Validierung nur für geschützte Routen
-                if (request.ResourcePath != "/users" && request.ResourcePath != "/sessions")
+                if (cleanResourcePath != "/users" && cleanResourcePath != "/sessions")
                 {
                     if (string.IsNullOrEmpty(request.Token))
                     {
@@ -53,6 +77,8 @@ namespace Trimmel_MCTG.HTTP
             Console.WriteLine($"No matching route found for Method: {request.Method} and Path: {request.ResourcePath}");
             return null;
         }
+
+
 
         // Diese Methode stellt sicher, dass der Payload-Body nicht null ist
         private string EnsureBody(string? body)

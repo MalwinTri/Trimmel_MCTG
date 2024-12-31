@@ -26,26 +26,42 @@ namespace Trimmel_MCTG.Execute
         {
             Response response = new Response();
 
+            // Prüfen, ob das Token bereitgestellt wurde
+            if (string.IsNullOrEmpty(requestContext.Token))
+            {
+                response.StatusCode = StatusCode.Unauthorized; // Setze 401 Unauthorized
+                response.Payload = "Authorization token is missing.";
+                return response;
+            }
+
             try
             {
                 // Extrahiere den Benutzernamen aus dem Token
                 string[] tokenParts = requestContext.Token.Split('-');
+                if (tokenParts.Length == 0 || string.IsNullOrEmpty(tokenParts[0]))
+                {
+                    response.StatusCode = StatusCode.BadRequest;
+                    response.Payload = "Invalid authorization token format.";
+                    return response;
+                }
+
                 string username = tokenParts[0];
 
                 // Rufe alle Karten des Benutzers aus der Datenbank ab
                 var userCards = db.GetCardsByUsername(username);
-
-                // Serialisiere die Karten in JSON
                 response.Payload = JsonConvert.SerializeObject(userCards);
-                response.StatusCode = StatusCode.Ok;
+                response.StatusCode = StatusCode.Ok; // Setze 200 OK
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"An error occurred: {ex.Message}");
+                response.StatusCode = StatusCode.InternalServerError; // Setze 500 Internal Server Error
                 response.Payload = $"An error occurred: {ex.Message}";
-                response.StatusCode = StatusCode.InternalServerError;
             }
 
             return response;
         }
+
+
     }
 }
