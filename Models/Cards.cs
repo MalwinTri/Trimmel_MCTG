@@ -1,19 +1,20 @@
 ﻿using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
+using Trimmel_MCTG.db;
 
 namespace Trimmel_MCTG.DB
 {
     public class Cards
     {
         [JsonProperty("Id")]
-        public Guid CardId { get; set; } 
+        public Guid CardId { get; set; }
 
         [JsonProperty("Name")]
         public string Name { get; set; }
-        public double Damage { get; set; } 
+        public double Damage { get; set; }
         public string ElementType { get; set; }
         public string CardType { get; set; }
-
 
         public Cards(Guid cardId, string name, double damage, string elementType, string cardType)
         {
@@ -24,13 +25,11 @@ namespace Trimmel_MCTG.DB
             CardType = cardType;
         }
 
-        // Methode zur Ausgabe der Karteninformationen
         public override string ToString()
         {
             return $"Card ID: {CardId}, Name: {Name}, Damage: {Damage}, Element: {ElementType}, Type: {CardType}";
         }
 
-        // Methode zur Festlegung des Elementtyps basierend auf dem Namen
         public void SetElementType()
         {
             if (Name != null)
@@ -44,7 +43,6 @@ namespace Trimmel_MCTG.DB
             }
         }
 
-        // Methode zur Festlegung des Kartentyps basierend auf dem Namen
         public void SetCardType()
         {
             if (Name != null && Name.Contains("Spell", StringComparison.OrdinalIgnoreCase))
@@ -57,7 +55,6 @@ namespace Trimmel_MCTG.DB
             }
         }
 
-
         public void ValidateCardType()
         {
             if (CardType != "spell" && CardType != "monster")
@@ -66,13 +63,11 @@ namespace Trimmel_MCTG.DB
             }
         }
 
-        // Methode zur Konvertierung des CardType in einen String (für die Datenbank)
         public string GetCardTypeAsString()
         {
-            return CardType.ToString().ToLowerInvariant(); // Enum-Wert in Kleinbuchstaben
+            return CardType.ToLowerInvariant();
         }
 
-        // Methode zur Wiederherstellung des CardType aus einem String (von der Datenbank)
         public static string ParseCardType(string cardTypeString)
         {
             if (!string.IsNullOrEmpty(cardTypeString))
@@ -83,7 +78,26 @@ namespace Trimmel_MCTG.DB
                     return lowerCardType;
                 }
             }
-            return "monster"; // Standardwert, wenn ungültig
+            return "monster"; // Default value if invalid
+        }
+
+        // Hinzugefügte Methode zur Interaktion mit der Datenbank
+        public static Cards LoadFromDatabase(Database db, Guid cardId)
+        {
+            var parameters = new Dictionary<string, object> { { "@cardId", cardId } };
+            var result = db.ExecuteQuery("SELECT * FROM cards WHERE card_id = @cardId", parameters);
+
+            if (result.Count == 0)
+                throw new KeyNotFoundException($"Card with ID {cardId} not found.");
+
+            var row = result[0];
+            return new Cards(
+                Guid.Parse(row["card_id"].ToString()),
+                row["name"].ToString(),
+                Convert.ToDouble(row["damage"]),
+                row["element_type"].ToString(),
+                row["card_type"].ToString()
+            );
         }
 
     }

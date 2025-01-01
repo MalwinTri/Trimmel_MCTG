@@ -324,7 +324,7 @@ start /b "kienboec battle" curl -i -X POST http://localhost:10001/battles --head
 start /b "altenhof battle" curl -i -X POST http://localhost:10001/battles --header "Authorization: Bearer altenhof-mtcgToken"
 ping localhost -n 10 >NUL 2>NUL
 
-if %pauseFlag%==1 pause
+if %pauseFlag%==0 pause
 
 REM --------------------------------------------------
 echo 18) Stats 
@@ -338,7 +338,7 @@ echo "Should return HTTP 200 - and changed user stats"
 echo.
 echo.
 
-if %pauseFlag%==1 pause
+if %pauseFlag%==0 pause
 
 REM --------------------------------------------------
 echo 19) scoreboard
@@ -347,7 +347,7 @@ echo "Should return HTTP 200 - and the changed scoreboard"
 echo.
 echo.
 
-if %pauseFlag%==1 pause
+if %pauseFlag%==0 pause
 
 REM --------------------------------------------------
 echo 20) trade

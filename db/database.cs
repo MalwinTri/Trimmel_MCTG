@@ -98,24 +98,25 @@ namespace Trimmel_MCTG.db
                 winner_id INT REFERENCES users(userid)
             );
 
-            CREATE TABLE IF NOT EXISTS trades (
-                trade_id SERIAL PRIMARY KEY,
-                userid INT REFERENCES users(userid) ON DELETE CASCADE,
-                offered_card_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
-                required_type VARCHAR(50) NOT NULL CHECK (required_type IN ('spell', 'monster')),
-                min_damage INT
+            CREATE TABLE trading (
+                tradingid SERIAL PRIMARY KEY,
+                userid INT NOT NULL REFERENCES users(userid) ON DELETE CASCADE,
+                offered_card_id UUID NOT NULL REFERENCES cards(card_id) ON DELETE CASCADE,
+                required_type card_type_enum NOT NULL,
+                min_damage INT DEFAULT 0 CHECK (min_damage >= 0)
             );
 
+
             CREATE TABLE IF NOT EXISTS scoreboard (
-            id SERIAL PRIMARY KEY,
-            userid INTEGER NOT NULL,
-            wins INTEGER DEFAULT 0,
-            losses INTEGER DEFAULT 0,
-            elo INTEGER DEFAULT 1000,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT fk_scoreboard_user FOREIGN KEY (userid) REFERENCES users(userid) ON DELETE CASCADE,
-            CONSTRAINT fk_scoreboard_userstats FOREIGN KEY (userid) REFERENCES userstats(userid) ON DELETE CASCADE
+                id SERIAL PRIMARY KEY,
+                userid INTEGER NOT NULL,
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                elo INTEGER DEFAULT 1000,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_scoreboard_user FOREIGN KEY (userid) REFERENCES users(userid) ON DELETE CASCADE,
+                CONSTRAINT fk_scoreboard_userstats FOREIGN KEY (userid) REFERENCES userstats(userid) ON DELETE CASCADE
             );";
 
             try

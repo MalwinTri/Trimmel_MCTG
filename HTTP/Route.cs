@@ -1,6 +1,7 @@
 ﻿using MCTG_Trimmel.HTTP;
 using Newtonsoft.Json;
 using Trimmel_MCTG.Execute;
+using Trimmel_MCTG.Executer;
 
 namespace Trimmel_MCTG.HTTP
 {
@@ -25,7 +26,10 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Put, "/deck"), request => new ShowDecksExecuter(request) },
                 { (HttpMethod.Get, "/stats"), request => new ShowStatsExecuter(request) },
                 { (HttpMethod.Get, "/scoreboard"), request => new ShowScoreboardExecuter(request) },
-                { (HttpMethod.Post, "/battles"), request => new BattleExecuter(request) }
+                { (HttpMethod.Post, "/battles"), request => new BattleExecuter(request) },
+                { (HttpMethod.Get, "/tradings"), request => new ShowTradingDealsExecuter(request) }, // Route für GET /tradings
+                { (HttpMethod.Post, "/tradings"), request => new CreateTradingDealExecuter(request) }  // Route für POST /tradings
+
 
                 // Weitere Routen können hier hinzugefügt werden
             };
