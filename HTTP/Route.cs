@@ -23,6 +23,9 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Get, "/cards"), request => new ShowCardsExecuter(request) },
                 { (HttpMethod.Get, "/deck"), request => new ShowDecksExecuter(request) },
                 { (HttpMethod.Put, "/deck"), request => new ShowDecksExecuter(request) },
+                { (HttpMethod.Get, "/stats"), request => new ShowStatsExecuter(request) },
+                { (HttpMethod.Get, "/scoreboard"), request => new ShowScoreboardExecuter(request) },
+                { (HttpMethod.Post, "/battles"), request => new BattleExecuter(request) }
 
                 // Weitere Routen können hier hinzugefügt werden
             };

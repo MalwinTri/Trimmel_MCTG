@@ -109,4 +109,26 @@ public class Users
         };
         return user;
     }
+
+    public static Users LoadFromDatabase(Database db, int userId)
+    {
+        var parameters = new Dictionary<string, object> { { "@userid", userId } };
+        var result = db.ExecuteQuery("SELECT userid, username, password, coins, bio, image FROM users WHERE userid = @userid", parameters);
+
+        if (result.Count == 0)
+        {
+            throw new KeyNotFoundException($"User with ID '{userId}' not found.");
+        }
+
+        var row = result[0];
+        return new Users
+        {
+            UserId = Convert.ToInt32(row["userid"]),
+            Username = row["username"].ToString(),
+            Password = row["password"].ToString(),
+            Coins = Convert.ToInt32(row["coins"]),
+            Bio = row["bio"]?.ToString(),
+            Image = row["image"]?.ToString()
+        };
+    }
 }

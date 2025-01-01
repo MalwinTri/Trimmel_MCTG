@@ -295,7 +295,7 @@ echo "Should return HTTP 4xx"
 echo.
 echo.
 
-if %pauseFlag%==1 pause
+if %pauseFlag%==0 pause
 
 REM --------------------------------------------------
 echo 15) stats
@@ -307,7 +307,7 @@ echo "Should return HTTP 200 - and user stats"
 echo.
 echo.
 
-if %pauseFlag%==1 pause
+if %pauseFlag%==0 pause
 
 REM --------------------------------------------------
 echo 16) scoreboard
@@ -316,7 +316,7 @@ echo "Should return HTTP 200 - and the scoreboard"
 echo.
 echo.
 
-if %pauseFlag%==1 pause
+if %pauseFlag%==0 pause
 
 REM --------------------------------------------------
 echo 17) battle

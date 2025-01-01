@@ -64,11 +64,11 @@ namespace Trimmel_MCTG.db
                 card_type VARCHAR(50) NOT NULL CHECK (card_type IN ('spell', 'monster'))
             );
 
-            CREATE TABLE IF NOT EXISTS user_stacks (
-                userid INT REFERENCES users(userid) ON DELETE CASCADE,
-                card_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
-                in_deck BOOLEAN DEFAULT FALSE,
-                PRIMARY KEY (userid, card_id)
+            CREATE TABLE IF NOT EXISTS userstats (
+                userid INT PRIMARY KEY REFERENCES users(userid) ON DELETE CASCADE,
+                wins INT DEFAULT 0,
+                losses INT DEFAULT 0,
+                elo INT DEFAULT 1000
             );
 
             CREATE TABLE IF NOT EXISTS packages (
@@ -104,6 +104,18 @@ namespace Trimmel_MCTG.db
                 offered_card_id UUID REFERENCES cards(card_id) ON DELETE CASCADE,
                 required_type VARCHAR(50) NOT NULL CHECK (required_type IN ('spell', 'monster')),
                 min_damage INT
+            );
+
+            CREATE TABLE IF NOT EXISTS scoreboard (
+            id SERIAL PRIMARY KEY,
+            userid INTEGER NOT NULL,
+            wins INTEGER DEFAULT 0,
+            losses INTEGER DEFAULT 0,
+            elo INTEGER DEFAULT 1000,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_scoreboard_user FOREIGN KEY (userid) REFERENCES users(userid) ON DELETE CASCADE,
+            CONSTRAINT fk_scoreboard_userstats FOREIGN KEY (userid) REFERENCES userstats(userid) ON DELETE CASCADE
             );";
 
             try
@@ -985,6 +997,7 @@ namespace Trimmel_MCTG.db
             db.ExecuteNonQuery(query, updateParams);
         }
 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 

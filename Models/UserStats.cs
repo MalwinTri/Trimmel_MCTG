@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Trimmel_MCTG.db;
 
 namespace Trimmel_MCTG.DB
 {
@@ -11,25 +9,58 @@ namespace Trimmel_MCTG.DB
         public int UserId { get; set; }
         public int Wins { get; set; } = 0;
         public int Losses { get; set; } = 0;
-        public int Elo { get; set; } = 1000; 
+        public int Elo { get; set; } = 1000;
 
-        public Users ?User { get; set; }
+        public Users? User { get; set; }
 
-        public Battle Battle
+        // Lädt oder erstellt die Statistiken eines Benutzers
+        public static UserStats LoadOrCreateStats(Database db, int userId)
         {
-            get => default;
-            set
+            var parameters = new Dictionary<string, object> { { "@userid", userId } };
+            var result = db.ExecuteQuery("SELECT * FROM userstats WHERE userid = @userid", parameters);
+
+            if (result.Count == 0)
             {
+                // Wenn keine Statistiken vorhanden sind, erstellen
+                db.ExecuteNonQuery(
+                    "INSERT INTO userstats (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000)",
+                    parameters
+                );
+
+                // Log optional hinzufügen
+                Console.WriteLine($"Created new stats entry for userId: {userId}");
+
+                // Nach der Erstellung erneut abrufen
+                result = db.ExecuteQuery("SELECT * FROM userstats WHERE userid = @userid", parameters);
             }
+
+            var row = result[0];
+            return new UserStats
+            {
+                UserId = Convert.ToInt32(row["userid"]),
+                Wins = Convert.ToInt32(row["wins"]),
+                Losses = Convert.ToInt32(row["losses"]),
+                Elo = Convert.ToInt32(row["elo"])
+            };
         }
 
-        public db.Database Database
+
+
+        // Aktualisieren der Statistiken
+        public void SaveToDatabase(db.Database db)
         {
-            get => default;
-            set
+            var parameters = new Dictionary<string, object>
             {
-            }
+                { "@userid", UserId },
+                { "@wins", Wins },
+                { "@losses", Losses },
+                { "@elo", Elo }
+            };
+
+            db.ExecuteNonQuery(
+                "UPDATE userstats SET wins = @wins, losses = @losses, elo = @elo WHERE userid = @userid",
+                parameters
+            );
         }
     }
-
 }
