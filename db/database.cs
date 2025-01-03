@@ -45,7 +45,7 @@ namespace Trimmel_MCTG.db
         public void CreateTables()
         {
             string createTablesCommand = @"
-            CREATE TABLE IF NOT EXISTS Users (
+            CREATE TABLE IF NOT EXISTS users (
                 userid SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
                 password TEXT NOT NULL,
@@ -98,14 +98,13 @@ namespace Trimmel_MCTG.db
                 winner_id INT REFERENCES users(userid)
             );
 
-            CREATE TABLE trading (
-                tradingid SERIAL PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS trading (
+                tradingid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 userid INT NOT NULL REFERENCES users(userid) ON DELETE CASCADE,
                 offered_card_id UUID NOT NULL REFERENCES cards(card_id) ON DELETE CASCADE,
                 required_type card_type_enum NOT NULL,
                 min_damage INT DEFAULT 0 CHECK (min_damage >= 0)
             );
-
 
             CREATE TABLE IF NOT EXISTS scoreboard (
                 id SERIAL PRIMARY KEY,
@@ -119,19 +118,25 @@ namespace Trimmel_MCTG.db
                 CONSTRAINT fk_scoreboard_userstats FOREIGN KEY (userid) REFERENCES userstats(userid) ON DELETE CASCADE
             );";
 
-            try
+            using (var transaction = conn.BeginTransaction())
             {
-                using (NpgsqlCommand cmd = new NpgsqlCommand(createTablesCommand, conn))
+                try
                 {
-                    cmd.ExecuteNonQuery();
+                    using (NpgsqlCommand cmd = new NpgsqlCommand(createTablesCommand, conn))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                    transaction.Commit();
                     Console.WriteLine("Tables created successfully or already exist.");
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error creating tables: {ex.Message}");
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine($"Error creating tables: {ex.Message}");
+                }
             }
         }
+
 
 
         // Funktioniert eigentlich nicht. Erst am Ende wenn alles implementiert ist
@@ -201,10 +206,11 @@ namespace Trimmel_MCTG.db
 
                 // Hash das Passwort des Benutzers für die sichere Speicherung
                 string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
-                // Generiere ein Token für den Benutzer
-                string userToken = Guid.NewGuid().ToString();
 
-                // SQL-Befehl zum Einfügen eines neuen Benutzers in die Datenbank vor
+                // Generiere einen benutzerdefinierten Token
+                string userToken = $"{user.Username}-mtcgToken";
+
+                // SQL-Befehl zum Einfügen eines neuen Benutzers in die Datenbank
                 using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins, token) VALUES (@username, @password, @coins, @token);", conn))
                 {
                     // Füge die Parameter für den SQL-Befehl hinzu
@@ -226,6 +232,7 @@ namespace Trimmel_MCTG.db
             }
             return false;
         }
+
 
 
         public bool Logging(Users user)
@@ -738,19 +745,24 @@ namespace Trimmel_MCTG.db
         }
 
 
-        public bool DoesUserOwnCard(string username, string cardId)
+        public bool DoesUserOwnCard(string username, Guid cardId)
         {
-            string query = "SELECT COUNT(*) FROM user_stacks us " +
-                           "JOIN users u ON us.userid = u.userid " +
-                           "WHERE u.username = @username AND us.card_id = @cardId;";
-            var parameters = new Dictionary<string, object>
-            {
-                { "@username", username },
-                { "@cardId", cardId }
-            };
+            string query = @"
+            SELECT COUNT(*) 
+            FROM user_stacks us
+            JOIN users u ON us.userid = u.userid
+            WHERE u.username = @username 
+              AND us.card_id = @cardId;";  // card_id = UUID, @cardId = STRING
+
+                var parameters = new Dictionary<string, object>
+        {
+            { "@username", username },
+            { "@cardId", cardId }
+        };
 
             return GetSingleValue<int>(query, parameters) > 0;
         }
+
 
         public void UpdateDeck(string username, string card1Id, string card2Id, string card3Id, string card4Id)
         {
@@ -999,6 +1011,22 @@ namespace Trimmel_MCTG.db
         }
 
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public int? GetUserIdFromToken(string token)
+        {
+            try
+            {
+                return GetSingleValue<int>(
+                    "SELECT userid FROM users WHERE token = @token",
+                    new Dictionary<string, object> { { "@token", token } }
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error retrieving UserId from token: {ex.Message}");
+                return null;
+            }
+        }
 
 
 
