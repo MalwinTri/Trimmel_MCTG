@@ -39,7 +39,8 @@ namespace Trimmel_MCTG.Executer
                 }
 
                 // Validierung der Eingabedaten
-                if (string.IsNullOrEmpty(payload.CardToTrade) ||
+                if (string.IsNullOrEmpty(payload.Id) ||
+                    string.IsNullOrEmpty(payload.CardToTrade) ||
                     string.IsNullOrEmpty(payload.Type) ||
                     payload.MinimumDamage < 0)
                 {
@@ -61,19 +62,18 @@ namespace Trimmel_MCTG.Executer
                 // Handelsangebot in der Datenbank erstellen
                 var parameters = new Dictionary<string, object>
                 {
-                    { "@userid", user.UserId },
+                    { "@tradingId", Guid.Parse(payload.Id) }, // Übernimm die `Id` aus dem Request
+                    { "@userId", user.UserId },
                     { "@offeredCardId", Guid.Parse(payload.CardToTrade) },
                     { "@requiredType", payload.Type },
                     { "@minDamage", payload.MinimumDamage }
                 };
 
-                parameters["@tradingId"] = Guid.NewGuid();
                 db.ExecuteNonQuery(
                     "INSERT INTO trading (tradingid, userid, offered_card_id, required_type, min_damage) " +
                     "VALUES (@tradingId, @userId, @offeredCardId, @requiredType::card_type_enum, @minDamage)",
                     parameters
                 );
-
 
                 response.Payload = "Trading deal created successfully.";
                 response.StatusCode = StatusCode.Created;
@@ -86,6 +86,7 @@ namespace Trimmel_MCTG.Executer
 
             return response;
         }
+
 
         private string ExtractUsernameFromToken(string token)
         {

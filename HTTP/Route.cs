@@ -10,6 +10,7 @@ namespace Trimmel_MCTG.HTTP
         // Dictionary zur Routenverwaltung
         private readonly Dictionary<(HttpMethod method, string resourcePath), Func<RequestContext, IRouteCommand>> routes;
 
+        // Implementierung von IRoute, bei Bedarf anpassen
         Route IRoute.Route { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
         public Route()
@@ -27,11 +28,11 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Get, "/stats"), request => new ShowStatsExecuter(request) },
                 { (HttpMethod.Get, "/scoreboard"), request => new ShowScoreboardExecuter(request) },
                 { (HttpMethod.Post, "/battles"), request => new BattleExecuter(request) },
-                { (HttpMethod.Get, "/tradings"), request => new ShowTradingDealsExecuter(request) }, // Route für GET /tradings
-                { (HttpMethod.Post, "/tradings"), request => new CreateTradingDealExecuter(request) }  // Route für POST /tradings
-
-
-                // Weitere Routen können hier hinzugefügt werden
+                { (HttpMethod.Get, "/tradings"), request => new ShowTradingDealsExecuter(request) }, 
+                // { (HttpMethod.Post, "/tradings"), request => new CreateTradingDealExecuter(request) },
+                { (HttpMethod.Post, "/tradings"), request => new TradeExecuter(request) }
+                
+                // Wichtig: KEIN Eintrag für (HttpMethod.Delete, "/tradings")!
             };
         }
 
@@ -42,17 +43,16 @@ namespace Trimmel_MCTG.HTTP
                 throw new ArgumentNullException(nameof(request), "Request cannot be null.");
             }
 
-            // Entferne Query-Parameter vom ResourcePath
+            // Entferne Query-Parameter vom ResourcePath (falls vorhanden)
             var cleanResourcePath = request.ResourcePath.Split('?')[0];
 
-            // Spezialfall für Benutzerpfade (mit Platzhalter)
+            // Spezialfall für /users/{username}
             if (cleanResourcePath.StartsWith("/users/"))
             {
                 var parts = cleanResourcePath.Split('/');
-                if (parts.Length == 3) // Pfad hat das Format /users/{username}
+                if (parts.Length == 3) 
                 {
-                    var username = parts[2]; // Extrahiere den Benutzernamen
-
+                    var username = parts[2];
                     if (request.Method == HttpMethod.Get)
                     {
                         return new GetUserDataExecuter(request, username);
@@ -64,10 +64,34 @@ namespace Trimmel_MCTG.HTTP
                 }
             }
 
-            // Überprüfe, ob die Route existiert (ohne Platzhalter)
+            // *** Spezialfall für /tradings/{id} (DELETE) ***
+            if (cleanResourcePath.StartsWith("/tradings/") && request.Method == HttpMethod.Delete)
+            {
+                var parts = cleanResourcePath.Split('/');
+                if (parts.Length == 3)
+                {
+                    var tradingId = parts[2]; // Hier steht dein GUID-String
+                    return new DeleteTradingDealExecuter(request, tradingId);
+                }
+            }
+
+            // In Route.cs
+            if (cleanResourcePath.StartsWith("/tradings/") && request.Method == HttpMethod.Post)
+            {
+                var parts = cleanResourcePath.Split('/');
+                if (parts.Length == 3)
+                {
+                    var tradingId = parts[2];
+                    // Hier rufst du den passenden Executer auf
+                    return new TradeExecuter(request);
+                }
+            }
+
+
+            // Überprüfe, ob eine passende Route im Dictionary existiert
             if (routes.TryGetValue((request.Method, cleanResourcePath), out var routeHandler))
             {
-                // Token-Validierung nur für geschützte Routen
+                // Token-Validierung für "geschützte" Routen (optional anpassen)
                 if (cleanResourcePath != "/users" && cleanResourcePath != "/sessions")
                 {
                     if (string.IsNullOrEmpty(request.Token))
@@ -77,15 +101,13 @@ namespace Trimmel_MCTG.HTTP
                     }
                 }
 
-                // Routen-Handler ausführen
+                // Routenhandler ausführen
                 return routeHandler(request);
             }
 
             Console.WriteLine($"No matching route found for Method: {request.Method} and Path: {request.ResourcePath}");
             return null;
         }
-
-
 
         // Diese Methode stellt sicher, dass der Payload-Body nicht null ist
         private string EnsureBody(string? body)
