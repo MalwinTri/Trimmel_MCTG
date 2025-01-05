@@ -13,16 +13,36 @@ namespace Trimmel_MCTG.DB
         [JsonProperty("Name")]
         public string Name { get; set; }
         public double Damage { get; set; }
-        public string ElementType { get; set; }
-        public string CardType { get; set; }
+        public string ElementType { get; set; } // fire, water, normal
+        public string CardType { get; set; } // monster, spell
+        public bool InDeck { get; set; }
 
-        public Cards(Guid cardId, string name, double damage, string elementType, string cardType)
+        public Cards(Guid cardId, string name, double damage, string elementType, string cardType, bool inDeck = false)
         {
             CardId = cardId;
             Name = name;
             Damage = damage;
             ElementType = elementType;
             CardType = cardType;
+            InDeck = inDeck;
+        }
+
+        public bool HasSpecialAbility()
+        {
+            // Liste der Karten mit Spezialfähigkeiten
+            var specialCards = new List<string>
+        {
+            "Goblin",
+            "Dragon",
+            "Wizard",
+            "Ork",
+            "Knight",
+            "WaterSpell",
+            "Kraken",
+            "FireElves"
+        };
+
+            return specialCards.Contains(this.Name);
         }
 
         public override string ToString()
@@ -99,6 +119,7 @@ namespace Trimmel_MCTG.DB
                 row["card_type"].ToString()
             );
         }
+
 
     }
 }
