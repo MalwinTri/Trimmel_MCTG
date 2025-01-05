@@ -26,8 +26,8 @@ public class ShowStatsExecuter : IRouteCommand
         try
         {
             string username = ExtractUsernameFromToken(requestContext.Token);
-            var user = Users.LoadFromDatabase(db, username);
 
+            var user = Users.LoadFromDatabase(db, username);
             if (user == null)
             {
                 response.Payload = "User not found.";
@@ -37,11 +37,10 @@ public class ShowStatsExecuter : IRouteCommand
 
             var stats = UserStats.LoadOrCreateStats(db, user.UserId);
 
-            // Nur Username und UserStats zurückgeben
-            var result = new
+            var result = new StatsResponse
             {
                 Username = user.Username,
-                UserStats = new
+                UserStats = new UserStatsResponse
                 {
                     UserId = stats.UserId,
                     Wins = stats.Wins,
@@ -52,6 +51,11 @@ public class ShowStatsExecuter : IRouteCommand
 
             response.Payload = JsonConvert.SerializeObject(result);
             response.StatusCode = StatusCode.Ok;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            response.Payload = ex.Message;
+            response.StatusCode = StatusCode.Unauthorized;
         }
         catch (Exception ex)
         {
@@ -65,12 +69,28 @@ public class ShowStatsExecuter : IRouteCommand
     private string ExtractUsernameFromToken(string token)
     {
         if (string.IsNullOrEmpty(token))
-            throw new ArgumentException("Token cannot be null or empty.", nameof(token));
+            throw new UnauthorizedAccessException("Authorization token is missing.");
 
         var parts = token.Split('-');
-        if (parts.Length > 0)
+        if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]))
             return parts[0];
 
-        throw new InvalidOperationException("Invalid token format.");
+        throw new UnauthorizedAccessException("Invalid token format.");
+    }
+
+    public class StatsResponse
+    {
+        public string Username { get; set; }
+        public UserStatsResponse UserStats { get; set; }
+    }
+
+    public class UserStatsResponse
+    {
+        public int UserId { get; set; }
+        public int Wins { get; set; }
+        public int Losses { get; set; }
+        public int Elo { get; set; }
     }
 }
+
+

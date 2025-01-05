@@ -266,6 +266,7 @@ namespace Trimmel_MCTG.db
                 return false;
             }
 
+            // Überprüfen, ob der Benutzer bereits in der Datenbank existiert
             if (IsUserInDatabase(user))
             {
                 Console.WriteLine($"User {user.Username} already exists.");
@@ -274,6 +275,7 @@ namespace Trimmel_MCTG.db
 
             try
             {
+                // Benutzer in der Tabelle `users` hinzufügen
                 using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
                 {
                     cmd.Parameters.AddWithValue("username", user.Username);
@@ -284,23 +286,41 @@ namespace Trimmel_MCTG.db
                     cmd.ExecuteNonQuery();
                 }
 
-                // Eintrag in `userstats` hinzufügen
-                int userId = GetSingleValue<int>("SELECT userid FROM users WHERE username = @username;", new Dictionary<string, object> { { "@username", user.Username } });
+                // `userId` abrufen
+                int userId = GetSingleValue<int>("SELECT userid FROM users WHERE username = @username;",
+                    new Dictionary<string, object> { { "@username", user.Username } });
 
-                using (NpgsqlCommand statsCmd = new NpgsqlCommand("INSERT INTO userstats (userid) VALUES (@userid);", conn))
+                // Überprüfen, ob bereits ein Eintrag in `userstats` existiert
+                bool statsExist = GetSingleValue<int>(
+                    "SELECT COUNT(*) FROM userstats WHERE userid = @userid;",
+                    new Dictionary<string, object> { { "@userid", userId } }) > 0;
+
+                if (!statsExist)
                 {
-                    statsCmd.Parameters.AddWithValue("@userid", userId);
-                    statsCmd.ExecuteNonQuery();
+                    using (NpgsqlCommand statsCmd = new NpgsqlCommand("INSERT INTO userstats (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
+                    {
+                        statsCmd.Parameters.AddWithValue("@userid", userId);
+                        statsCmd.ExecuteNonQuery();
+                    }
                 }
 
-                // Eintrag in `scoreboard` hinzufügen
-                using (NpgsqlCommand scoreboardCmd = new NpgsqlCommand("INSERT INTO scoreboard (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
+
+                // Überprüfen, ob bereits ein Eintrag in `scoreboard` existiert
+                bool scoreboardExists = GetSingleValue<int>(
+                    "SELECT COUNT(*) FROM scoreboard WHERE userid = @userid;",
+                    new Dictionary<string, object> { { "@userid", userId } }) > 0;
+
+                // Falls nicht vorhanden, Eintrag in `scoreboard` hinzufügen
+                if (!scoreboardExists)
                 {
-                    scoreboardCmd.Parameters.AddWithValue("@userid", userId);
-                    scoreboardCmd.ExecuteNonQuery();
+                    using (NpgsqlCommand scoreboardCmd = new NpgsqlCommand("INSERT INTO scoreboard (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
+                    {
+                        scoreboardCmd.Parameters.AddWithValue("@userid", userId);
+                        scoreboardCmd.ExecuteNonQuery();
+                    }
                 }
 
-                Console.WriteLine($"User {user.Username} registered successfully with initial scoreboard entry.");
+                Console.WriteLine($"User {user.Username} registered successfully with initial stats and scoreboard entries.");
                 return true;
             }
             catch (PostgresException ex)
@@ -314,6 +334,7 @@ namespace Trimmel_MCTG.db
 
             return false;
         }
+
 
 
 

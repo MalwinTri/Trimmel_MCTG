@@ -17,7 +17,7 @@ namespace Trimmel_MCTG.Execute
 
         public void SetDatabase(Database database)
         {
-            // Keine Datenbank erforderlich für Fehlerbehandlung
+
         }
 
         public Response Execute()

@@ -47,20 +47,22 @@ public class BattleExecuter : IRouteCommand
                 {
                     waitingPlayers.Enqueue(user.UserId);
                     response.Payload = "Warten auf zweiten Spieler.";
-                    response.StatusCode = StatusCode.InternalServerError;
+                    response.StatusCode = StatusCode.Accepted;
                     return response;
                 }
+                else
+                {
+                    // Zweiten Spieler finden
+                    int opponentId = waitingPlayers.Dequeue();
 
-                // Zweiten Spieler finden
-                int opponentId = waitingPlayers.Dequeue();
+                    // Gegner aus der Datenbank laden
+                    var opponent = Users.LoadFromDatabase(db, opponentId);
+                    StartBattle(user, opponent);
 
-                // Gegner aus der Datenbank laden
-                var opponent = Users.LoadFromDatabase(db, opponentId);
-                StartBattle(user, opponent);
-
-                response.Payload = "Kampf gestartet!";
-                response.StatusCode = StatusCode.Ok;
-                return response;
+                    response.Payload = "Kampf gestartet!";
+                    response.StatusCode = StatusCode.Ok;
+                    return response;
+                } 
             }
         }
         catch (Exception ex)
@@ -74,9 +76,16 @@ public class BattleExecuter : IRouteCommand
 
     private string ExtractUsernameFromToken(string token)
     {
-        if (string.IsNullOrEmpty(token)) throw new ArgumentException("Token cannot be null or empty.");
-        return token.Split('-')[0];
+        if (string.IsNullOrEmpty(token))
+            throw new UnauthorizedAccessException("Authorization token is missing.");
+
+        var parts = token.Split('-');
+        if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]))
+            return parts[0];
+
+        throw new UnauthorizedAccessException("Invalid token format.");
     }
+
 
     private void StartBattle(Users player1, Users player2)
     {
