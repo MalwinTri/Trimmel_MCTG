@@ -27,13 +27,14 @@ public class ShowScoreboardExecuter : IRouteCommand
 
         try
         {
-            // Abfrage der Scoreboard-Daten
+            Console.WriteLine("Fetching scoreboard data...");
             var results = db.ExecuteQuery("SELECT * FROM scoreboard ORDER BY elo DESC", new Dictionary<string, object>());
 
-            // Verarbeitung der Ergebnisse
+            Console.WriteLine($"Rows fetched: {results.Count}");
             var scoreboards = new List<Scoreboard>();
             foreach (var row in results)
             {
+                Console.WriteLine($"Processing row: {JsonConvert.SerializeObject(row)}");
                 scoreboards.Add(new Scoreboard
                 {
                     Id = Convert.ToInt32(row["id"]),
@@ -46,12 +47,12 @@ public class ShowScoreboardExecuter : IRouteCommand
                 });
             }
 
-            // JSON-Daten für die Antwort
             response.Payload = JsonConvert.SerializeObject(scoreboards);
             response.StatusCode = StatusCode.Ok;
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"Error occurred: {ex.Message}");
             response.Payload = $"An error occurred: {ex.Message}";
             response.StatusCode = StatusCode.InternalServerError;
         }

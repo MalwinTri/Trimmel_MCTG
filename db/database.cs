@@ -276,17 +276,31 @@ namespace Trimmel_MCTG.db
                 using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
                 {
                     cmd.Parameters.AddWithValue("username", user.Username);
-
-                    // Hash the password for security
                     string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
                     cmd.Parameters.AddWithValue("password", hashedPassword);
-
-                    // Set default coins value from user object
                     cmd.Parameters.AddWithValue("coins", user.Coins);
 
                     cmd.ExecuteNonQuery();
-                    return true;
                 }
+
+                // Eintrag in `userstats` hinzufügen
+                int userId = GetSingleValue<int>("SELECT userid FROM users WHERE username = @username;", new Dictionary<string, object> { { "@username", user.Username } });
+
+                using (NpgsqlCommand statsCmd = new NpgsqlCommand("INSERT INTO userstats (userid) VALUES (@userid);", conn))
+                {
+                    statsCmd.Parameters.AddWithValue("@userid", userId);
+                    statsCmd.ExecuteNonQuery();
+                }
+
+                // Eintrag in `scoreboard` hinzufügen
+                using (NpgsqlCommand scoreboardCmd = new NpgsqlCommand("INSERT INTO scoreboard (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
+                {
+                    scoreboardCmd.Parameters.AddWithValue("@userid", userId);
+                    scoreboardCmd.ExecuteNonQuery();
+                }
+
+                Console.WriteLine($"User {user.Username} registered successfully with initial scoreboard entry.");
+                return true;
             }
             catch (PostgresException ex)
             {
@@ -299,6 +313,8 @@ namespace Trimmel_MCTG.db
 
             return false;
         }
+
+
 
         public bool GenerateAndStoreToken(Users user)
         {
@@ -709,74 +725,95 @@ namespace Trimmel_MCTG.db
 
         public void ConfigureDeck(string username, List<string> cardIds)
         {
-            using (var connection = new NpgsqlConnection(connectionString))
+            using (var transaction = conn.BeginTransaction())
             {
-                connection.Open();
-
-                // Überprüfen, ob die Karten dem Benutzer gehören
-                var command = new NpgsqlCommand(@"
-                    SELECT COUNT(*)
-                    FROM user_stacks
-                    WHERE userid = (SELECT userid FROM users WHERE username = @username)
-                      AND card_id = ANY(@cardIds)", connection);
-                command.Parameters.AddWithValue("username", username);
-                command.Parameters.AddWithValue("cardIds", cardIds.ToArray());
-
-                int count = (int)command.ExecuteScalar();
-
-                if (count != 4)
+                try
                 {
-                    throw new Exception("Not all specified cards belong to the user.");
+                    Console.WriteLine("Beginne mit der Konfiguration des Decks...");
+
+                    // 1. Holen Sie die User-ID
+                    string userIdQuery = "SELECT userid FROM users WHERE username = @username;";
+                    int userId = GetSingleValue<int>(userIdQuery, new Dictionary<string, object> { { "@username", username } });
+
+                    if (userId == 0)
+                    {
+                        throw new Exception("User not found.");
+                    }
+
+                    Console.WriteLine($"User ID für {username}: {userId}");
+
+                    // 2. Überprüfen, ob die Karten dem Benutzer gehören und nicht bereits im Deck sind
+                    string checkCardsQuery = @"
+                        SELECT card_id, in_deck 
+                        FROM user_stacks 
+                        WHERE userid = @userId AND card_id = ANY(@cardIds);";
+
+                    var userCards = GetUserCards(userId, cardIds);
+
+                    if (userCards.Count != 4)
+                    {
+                        var missingCards = cardIds.Except(userCards.Select(c => c.CardId.ToString())).ToList();
+                        Console.WriteLine($"Die folgenden Karten gehören nicht zum Benutzer oder existieren nicht: {string.Join(", ", missingCards)}");
+                        throw new Exception("Not all specified cards belong to the user or are already in a deck.");
+                    }
+
+                    var alreadyInDeck = userCards.Where(c => c.InDeck).Select(c => c.CardId.ToString()).ToList();
+                    if (alreadyInDeck.Any())
+                    {
+                        Console.WriteLine($"Die folgenden Karten sind bereits in einem Deck: {string.Join(", ", alreadyInDeck)}");
+                        throw new Exception("Not all specified cards belong to the user or are already in a deck.");
+                    }
+
+                    Console.WriteLine("Alle Karten gehören zum Benutzer und sind nicht in einem Deck.");
+
+                    // 3. Lösche das bestehende Deck für den Benutzer
+                    string deleteDeckQuery = "DELETE FROM decks WHERE userid = @userId;";
+                    ExecuteNonQuery(deleteDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
+                    Console.WriteLine("Bestehendes Deck gelöscht.");
+
+                    // 4. Füge das neue Deck ein
+                    string insertDeckQuery = @"
+                        INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id) 
+                        VALUES (@userId, @card1Id, @card2Id, @card3Id, @card4Id);";
+                    ExecuteNonQuery(insertDeckQuery, new Dictionary<string, object>
+                    {
+                        { "@userId", userId },
+                        { "@card1Id", Guid.Parse(cardIds[0]) },
+                        { "@card2Id", Guid.Parse(cardIds[1]) },
+                        { "@card3Id", Guid.Parse(cardIds[2]) },
+                        { "@card4Id", Guid.Parse(cardIds[3]) }
+                    });
+                    Console.WriteLine("Neues Deck eingefügt.");
+
+                    // 5. Aktualisiere die `user_stacks`-Tabelle
+                    // Setze alle Karten von diesem Benutzer auf FALSE
+                    string resetInDeckQuery = "UPDATE user_stacks SET in_deck = FALSE WHERE userid = @userId;";
+                    ExecuteNonQuery(resetInDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
+                    Console.WriteLine("Alle Karten auf in_deck = FALSE gesetzt.");
+
+                    // Setze die ausgewählten Karten auf TRUE
+                    string updateInDeckQuery = "UPDATE user_stacks SET in_deck = TRUE WHERE userid = @userId AND card_id = ANY(@cardIds);";
+                    ExecuteNonQuery(updateInDeckQuery, new Dictionary<string, object>
+                    {
+                        { "@userId", userId },
+                        { "@cardIds", cardIds.Select(Guid.Parse).ToArray() }
+                    });
+                    Console.WriteLine("Ausgewählte Karten auf in_deck = TRUE gesetzt.");
+
+                    // 6. Commit der Transaktion
+                    transaction.Commit();
+                    Console.WriteLine("Deck-Konfiguration erfolgreich abgeschlossen.");
                 }
-
-                // Überprüfen, ob die Karten in einem anderen Deck verwendet werden
-                var cardCheckCommand = new NpgsqlCommand(@"
-                    SELECT COUNT(*)
-                    FROM decks
-                    WHERE card_1_id = ANY(@cardIds)
-                       OR card_2_id = ANY(@cardIds)
-                       OR card_3_id = ANY(@cardIds)
-                       OR card_4_id = ANY(@cardIds)", connection);
-                cardCheckCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
-
-                int inOtherDecksCount = (int)cardCheckCommand.ExecuteScalar();
-
-                if (inOtherDecksCount > 0)
+                catch (Exception ex)
                 {
-                    throw new Exception("One or more cards are already in another user's deck.");
+                    // Fehlerbehandlung und Rollback der Transaktion
+                    transaction.Rollback();
+                    Console.WriteLine($"Error configuring deck: {ex.Message}");
+                    throw;
                 }
-
-                // Bestehendes Deck löschen
-                var deleteCommand = new NpgsqlCommand(@"
-            DELETE FROM decks
-            WHERE userid = (SELECT userid FROM users WHERE username = @username)", connection);
-                deleteCommand.Parameters.AddWithValue("username", username);
-                deleteCommand.ExecuteNonQuery();
-
-                // Neues Deck einfügen
-                var insertCommand = new NpgsqlCommand(@"
-                    INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
-                    VALUES (
-                        (SELECT userid FROM users WHERE username = @username),
-                        @card1, @card2, @card3, @card4)", connection);
-                insertCommand.Parameters.AddWithValue("username", username);
-                insertCommand.Parameters.AddWithValue("card1", cardIds[0]);
-                insertCommand.Parameters.AddWithValue("card2", cardIds[1]);
-                insertCommand.Parameters.AddWithValue("card3", cardIds[2]);
-                insertCommand.Parameters.AddWithValue("card4", cardIds[3]);
-                insertCommand.ExecuteNonQuery();
-
-                // Kartenstatus aktualisieren
-                var updateCommand = new NpgsqlCommand(@"
-                    UPDATE user_stacks
-                    SET in_deck = 't'
-                    WHERE userid = (SELECT userid FROM users WHERE username = @username)
-                      AND card_id = ANY(@cardIds)", connection);
-                updateCommand.Parameters.AddWithValue("username", username);
-                updateCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
-                updateCommand.ExecuteNonQuery();
             }
         }
+
 
 
         // Zusätzliche Hilfsmethode zum Abrufen der Benutzerkarten
@@ -1139,6 +1176,31 @@ namespace Trimmel_MCTG.db
                 return null;
             }
         }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public void UpdateScoreboard(string winnerUsername, string loserUsername)
+        {
+            // Gewinner upserten
+            var queryWinner = @"
+                INSERT INTO scoreboard (userid, wins, losses, elo) 
+                VALUES ((SELECT userid FROM users WHERE username = @winner), 1, 0, 10)
+                ON CONFLICT (userid) 
+                DO UPDATE SET wins = scoreboard.wins + 1, elo = scoreboard.elo + 10, updated_at = CURRENT_TIMESTAMP;";
+
+            // Verlierer upserten
+            var queryLoser = @"
+                INSERT INTO scoreboard (userid, wins, losses, elo) 
+                VALUES ((SELECT userid FROM users WHERE username = @loser), 0, 1, -10)
+                ON CONFLICT (userid) 
+                DO UPDATE SET losses = scoreboard.losses + 1, elo = scoreboard.elo - 10, updated_at = CURRENT_TIMESTAMP;";
+
+            ExecuteNonQuery(queryWinner, new Dictionary<string, object> { { "@winner", winnerUsername } });
+            ExecuteNonQuery(queryLoser, new Dictionary<string, object> { { "@loser", loserUsername } });
+        }
+
+
+
 
         public void Dispose()
         {

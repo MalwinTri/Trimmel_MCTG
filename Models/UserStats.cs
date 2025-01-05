@@ -33,6 +33,18 @@ namespace Trimmel_MCTG.DB
                 // Nach der Erstellung erneut abrufen
                 result = db.ExecuteQuery("SELECT * FROM userstats WHERE userid = @userid", parameters);
             }
+            else
+            {
+                // Erstellen Sie die UserStats, falls sie nicht existieren
+                db.ExecuteNonQuery("INSERT INTO userstats (userid, wins, losses, elo) VALUES (@userId, 0, 0, 1000)", new Dictionary<string, object> { { "@userId", userId } });
+                return new UserStats
+                {
+                    UserId = userId,
+                    Wins = 0,
+                    Losses = 0,
+                    Elo = 1000
+                };
+            }
 
             var row = result[0];
             return new UserStats
