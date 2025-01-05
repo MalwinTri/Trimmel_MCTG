@@ -50,11 +50,17 @@ public class LoginExecuter : IRouteCommand
         var response = new Response();
         try
         {
-            // Versuche, den Benutzer über die Datenbank anzumelden
-            if (db.Logging(user))
+            // Versuche, den Benutzer über die Datenbank anzumelden und den Token zurückzugeben
+            string? token = db.Logging(user);
+
+            if (!string.IsNullOrEmpty(token))
             {
-                // Wenn die Anmeldung erfolgreich war, setze die Payload und den StatusCode auf OK
-                response.Payload = "User successfully logged in";
+                // Wenn die Anmeldung erfolgreich war, setze die Payload mit Token und den StatusCode auf OK
+                response.Payload = JsonConvert.SerializeObject(new
+                {
+                    Message = "User successfully logged in",
+                    Token = token
+                });
                 response.StatusCode = StatusCode.Ok;
             }
             else
@@ -73,4 +79,5 @@ public class LoginExecuter : IRouteCommand
 
         return response;
     }
+
 }

@@ -29,10 +29,8 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Get, "/scoreboard"), request => new ShowScoreboardExecuter(request) },
                 { (HttpMethod.Post, "/battles"), request => new BattleExecuter(request) },
                 { (HttpMethod.Get, "/tradings"), request => new ShowTradingDealsExecuter(request) }, 
-                // { (HttpMethod.Post, "/tradings"), request => new CreateTradingDealExecuter(request) },
                 { (HttpMethod.Post, "/tradings"), request => new TradeExecuter(request) }
-                
-                // Wichtig: KEIN Eintrag für (HttpMethod.Delete, "/tradings")!
+
             };
         }
 
@@ -50,7 +48,7 @@ namespace Trimmel_MCTG.HTTP
             if (cleanResourcePath.StartsWith("/users/"))
             {
                 var parts = cleanResourcePath.Split('/');
-                if (parts.Length == 3) 
+                if (parts.Length == 3)
                 {
                     var username = parts[2];
                     if (request.Method == HttpMethod.Get)
@@ -87,7 +85,6 @@ namespace Trimmel_MCTG.HTTP
                 }
             }
 
-
             // Überprüfe, ob eine passende Route im Dictionary existiert
             if (routes.TryGetValue((request.Method, cleanResourcePath), out var routeHandler))
             {
@@ -108,6 +105,7 @@ namespace Trimmel_MCTG.HTTP
             Console.WriteLine($"No matching route found for Method: {request.Method} and Path: {request.ResourcePath}");
             return null;
         }
+
 
         // Diese Methode stellt sicher, dass der Payload-Body nicht null ist
         private string EnsureBody(string? body)

@@ -29,7 +29,7 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                // Überprüfen, ob ein Token vorhanden ist
+                // Token-Validierung
                 if (string.IsNullOrEmpty(requestContext?.Token))
                 {
                     response.Payload = "Token is missing or invalid.";
@@ -38,59 +38,73 @@ namespace Trimmel_MCTG.Execute
                 }
 
                 // Benutzername aus Token extrahieren
-                string[] tokenParts = requestContext.Token.Split('-');
-                string username = tokenParts[0];
+                string username = requestContext.Token.Split('-')[0];
+                Console.WriteLine($"Authentifizierter Benutzer: {username}");
 
-                // Query-Parameter auslesen
-                var format = requestContext.QueryParameters.ContainsKey("format") ? requestContext.QueryParameters["format"] : "json";
+                // Routen-Handling
+                Console.WriteLine($"Received ResourcePath: {requestContext.ResourcePath}");
+                if (requestContext.ResourcePath == "/deck/unconfigured")
+                {
+                    Console.WriteLine("Aufruf: /deck/unconfigured");
+                    return ShowUnconfiguredDeck(username);
+                }
 
-                if (requestContext.Method == CustomHttpMethod.Get)
+                // Konfigurierte Decks oder Deck-Konfiguration
+                var format = requestContext.QueryParameters?.ContainsKey("format") ?? false
+                    ? requestContext.QueryParameters["format"]
+                    : "json";
+
+                Console.WriteLine($"HTTP-Methode: {requestContext.Method}, Format: {format}");
+
+                return requestContext.Method switch
                 {
-                    return ShowConfiguredDeck(username, format); // Methode ShowConfiguredDeck aufrufen
-                }
-                else if (requestContext.Method == CustomHttpMethod.Put)
-                {
-                    return ConfigureDeck(username); // Methode ConfigureDeck aufrufen
-                }
-                else
-                {
-                    response.Payload = "Unsupported HTTP method.";
-                    response.StatusCode = StatusCode.NotFound;
-                }
+                    CustomHttpMethod.Get => ShowConfiguredDeck(username, format),
+                    CustomHttpMethod.Put => ConfigureDeckFromPayload(username),
+                    _ => new Response
+                    {
+                        StatusCode = StatusCode.Forbidden,
+                        Payload = "Unsupported HTTP method."
+                    }
+                };
             }
             catch (Exception ex)
             {
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
+                Console.WriteLine($"Fehler in Execute: {ex.Message}");
             }
 
             return response;
         }
 
-
-
-
-        // Methode zum Anzeigen des Decks (GET)
-        private Response ShowDeck(string username)
+        // Methode zum Anzeigen des konfigurierten Decks (GET /deck)
+        private Response ShowConfiguredDeck(string username, string format)
         {
             var response = new Response();
             try
             {
-                var deckCards = db.ShowUnconfiguredDeck(username);
+                Console.WriteLine($"Abrufen des konfigurierten Decks für Benutzer: {username}");
+                var deckCards = db.GetConfiguredDeck(username);
+                Console.WriteLine($"Anzahl der Karten im Deck: {deckCards?.Count ?? 0}");
 
                 if (deckCards == null || deckCards.Count == 0)
                 {
-                    response.Payload = JsonConvert.SerializeObject(new List<object>());
+                    Console.WriteLine("Deck ist leer.");
+                    response.Payload = format == "plain" ? "Deck is empty." : JsonConvert.SerializeObject(new List<object>());
                     response.StatusCode = StatusCode.Ok;
                 }
                 else
                 {
-                    response.Payload = JsonConvert.SerializeObject(deckCards);
+                    Console.WriteLine("Deck enthält Karten.");
+                    response.Payload = format == "plain"
+                        ? FormatDeckAsPlainText(deckCards, username)
+                        : JsonConvert.SerializeObject(deckCards);
                     response.StatusCode = StatusCode.Ok;
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"Fehler beim Abrufen des Decks: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
             }
@@ -98,8 +112,8 @@ namespace Trimmel_MCTG.Execute
             return response;
         }
 
-        // Methode zum Konfigurieren des Decks (PUT)
-        private Response ConfigureDeck(string username)
+        // Methode zum Konfigurieren des Decks (PUT /deck)
+        private Response ConfigureDeckFromPayload(string username)
         {
             var response = new Response();
 
@@ -124,14 +138,15 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Deck aktualisieren
-                db.UpdateDeck(username, cardIds[0], cardIds[1], cardIds[2], cardIds[3]);
+                // Deck konfigurieren über die Database-Klasse
+                db.ConfigureDeck(username, cardIds);
 
                 response.Payload = "Deck configured successfully.";
                 response.StatusCode = StatusCode.Ok;
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"Fehler in ConfigureDeckFromPayload: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
             }
@@ -139,40 +154,40 @@ namespace Trimmel_MCTG.Execute
             return response;
         }
 
-        public Response ShowConfiguredDeck(string username, string format = "json")
+        // Methode zum Anzeigen des unkonfigurierten Decks (GET /deck/unconfigured)
+        private Response ShowUnconfiguredDeck(string username)
         {
             var response = new Response();
+
             try
             {
-                var deckCards = db.GetConfiguredDeck(username); // Methode, die das Deck aus der DB abruft
+                Console.WriteLine($"Abrufen des unkonfigurierten Decks für Benutzer: {username}");
+                var deckCards = db.ShowUnconfiguredDeck(username);
 
                 if (deckCards == null || deckCards.Count == 0)
                 {
-                    response.Payload = (format == "plain") ? "Deck is empty." : JsonConvert.SerializeObject(new List<object>());
+                    Console.WriteLine("Unkonfiguriertes Deck ist leer.");
+                    response.Payload = JsonConvert.SerializeObject(new List<object>()); // Leeres JSON-Array
                     response.StatusCode = StatusCode.Ok;
-                    return response;
-                }
-
-                if (format == "plain")
-                {
-                    var plainText = FormatDeckAsPlainText(deckCards, username);
-                    response.Payload = plainText;
                 }
                 else
                 {
+                    Console.WriteLine("Unkonfiguriertes Deck enthält Karten.");
                     response.Payload = JsonConvert.SerializeObject(deckCards);
+                    response.StatusCode = StatusCode.Ok;
                 }
-
-                response.StatusCode = StatusCode.Ok;
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"Fehler beim Abrufen des unkonfigurierten Decks: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
             }
+
             return response;
         }
 
+        // Methode zum Formatieren des Decks als Plain Text
         private string FormatDeckAsPlainText(List<Cards> deckCards, string username)
         {
             var sb = new StringBuilder();
@@ -185,6 +200,5 @@ namespace Trimmel_MCTG.Execute
             }
             return sb.ToString();
         }
-
     }
 }

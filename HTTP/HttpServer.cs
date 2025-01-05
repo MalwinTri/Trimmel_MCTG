@@ -49,7 +49,7 @@ namespace Trimmel_MCTG.HTTP
                     try
                     {
                         var connection = tcpListener.AcceptTcpClient();
-                        Console.WriteLine("Client connected");
+                        Console.WriteLine("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
 
                         // Verwenden des ThreadPools zum Handling der Clients
                         ThreadPool.QueueUserWorkItem(HandleClient, connection);
@@ -81,16 +81,20 @@ namespace Trimmel_MCTG.HTTP
 
             try
             {
-                using (connection) // Sicherstellen, dass die Verbindung korrekt geschlossen wird
+                using (connection)
                 {
                     var client = new HttpClient(connection);
                     var request = client.ReceiveRequest();
 
                     Response response;
 
+                    if (request != null)
+                    {
+                        LogRequest(request); // Konsolidierte Protokollierung der Anfrage
+                    }
+
                     if (request == null)
                     {
-                        Console.WriteLine("Received invalid request.");
                         response = new Response
                         {
                             StatusCode = StatusCode.BadRequest,
@@ -101,14 +105,12 @@ namespace Trimmel_MCTG.HTTP
                     {
                         try
                         {
-
-                            // dass nur ein Thread gleichzeitig darauf zugreift.
                             lock (db)
                             {
                                 var command = route.Resolve(request);
                                 if (command != null)
                                 {
-                                    command.SetDatabase(db); // Setzen der Datenbankverbindung
+                                    command.SetDatabase(db);
                                     response = command.Execute();
                                 }
                                 else
@@ -132,7 +134,7 @@ namespace Trimmel_MCTG.HTTP
                         }
                     }
 
-                    client.SendResponse(response);
+                    LogResponse((int)response.StatusCode, response.Payload ?? string.Empty); // Konsolidierte Protokollierung der Antwort
                 }
             }
             catch (SocketException ex)
@@ -148,6 +150,33 @@ namespace Trimmel_MCTG.HTTP
                 Console.WriteLine($"Error handling client: {ex.Message}");
             }
         }
+
+        private static void LogRequest(RequestContext request)
+        {
+            Console.WriteLine("Request Received:");
+            Console.WriteLine($"{request.Method} {request.ResourcePath} HTTP/1.1");
+
+            if (!string.IsNullOrEmpty(request.Payload))
+            {
+                Console.WriteLine($"Payload: {request.Payload}");
+            }
+
+            Console.WriteLine(); // Leerzeile für bessere Lesbarkeit
+        }
+
+        private static void LogResponse(int statusCode, string message)
+        {
+            string color = statusCode switch
+            {
+                >= 200 and < 300 => "\u001b[32m", // Grün
+                >= 400 and < 500 => "\u001b[31m", // Rot
+                _ => "\u001b[0m"                 // Standard
+            };
+
+            Console.WriteLine($"{color}Response Sent: {statusCode} {message}\u001b[0m");
+        }
+
+
 
         public void Stop()
         {
