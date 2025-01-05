@@ -1,4 +1,5 @@
-﻿using Npgsql;
+﻿using Newtonsoft.Json;
+using Npgsql;
 using Trimmel_MCTG.DB;
 using Trimmel_MCTG.Execute;
 
@@ -725,94 +726,84 @@ namespace Trimmel_MCTG.db
 
         public void ConfigureDeck(string username, List<string> cardIds)
         {
-            using (var transaction = conn.BeginTransaction())
+            using (var connection = new NpgsqlConnection(connectionString))
             {
-                try
+                connection.Open();
+
+                Console.WriteLine($"Validating cards for user: {username}");
+
+                // Kartentypen validieren
+                var validateCardsCommand = new NpgsqlCommand(@"
+                    SELECT c.card_id, c.card_type
+                    FROM user_stacks us
+                    JOIN cards c ON us.card_id = c.card_id
+                    WHERE us.userid = (SELECT userid FROM users WHERE username = @username)
+                      AND c.card_id = ANY(@cardIds::uuid[]);", connection);
+
+                validateCardsCommand.Parameters.AddWithValue("username", username);
+                validateCardsCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
+
+                var cardTypes = new Dictionary<string, int> { { "monster", 0 }, { "spell", 0 } };
+
+                using (var reader = validateCardsCommand.ExecuteReader())
                 {
-                    Console.WriteLine("Beginne mit der Konfiguration des Decks...");
-
-                    // 1. Holen Sie die User-ID
-                    string userIdQuery = "SELECT userid FROM users WHERE username = @username;";
-                    int userId = GetSingleValue<int>(userIdQuery, new Dictionary<string, object> { { "@username", username } });
-
-                    if (userId == 0)
+                    while (reader.Read())
                     {
-                        throw new Exception("User not found.");
+                        var cardId = reader["card_id"].ToString();
+                        var cardType = reader["card_type"].ToString();
+
+                        Console.WriteLine($"Card ID: {cardId}, Type: {cardType}");
+
+                        if (cardTypes.ContainsKey(cardType))
+                        {
+                            cardTypes[cardType]++;
+                        }
                     }
-
-                    Console.WriteLine($"User ID für {username}: {userId}");
-
-                    // 2. Überprüfen, ob die Karten dem Benutzer gehören und nicht bereits im Deck sind
-                    string checkCardsQuery = @"
-                        SELECT card_id, in_deck 
-                        FROM user_stacks 
-                        WHERE userid = @userId AND card_id = ANY(@cardIds);";
-
-                    var userCards = GetUserCards(userId, cardIds);
-
-                    if (userCards.Count != 4)
-                    {
-                        var missingCards = cardIds.Except(userCards.Select(c => c.CardId.ToString())).ToList();
-                        Console.WriteLine($"Die folgenden Karten gehören nicht zum Benutzer oder existieren nicht: {string.Join(", ", missingCards)}");
-                        throw new Exception("Not all specified cards belong to the user or are already in a deck.");
-                    }
-
-                    var alreadyInDeck = userCards.Where(c => c.InDeck).Select(c => c.CardId.ToString()).ToList();
-                    if (alreadyInDeck.Any())
-                    {
-                        Console.WriteLine($"Die folgenden Karten sind bereits in einem Deck: {string.Join(", ", alreadyInDeck)}");
-                        throw new Exception("Not all specified cards belong to the user or are already in a deck.");
-                    }
-
-                    Console.WriteLine("Alle Karten gehören zum Benutzer und sind nicht in einem Deck.");
-
-                    // 3. Lösche das bestehende Deck für den Benutzer
-                    string deleteDeckQuery = "DELETE FROM decks WHERE userid = @userId;";
-                    ExecuteNonQuery(deleteDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
-                    Console.WriteLine("Bestehendes Deck gelöscht.");
-
-                    // 4. Füge das neue Deck ein
-                    string insertDeckQuery = @"
-                        INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id) 
-                        VALUES (@userId, @card1Id, @card2Id, @card3Id, @card4Id);";
-                    ExecuteNonQuery(insertDeckQuery, new Dictionary<string, object>
-                    {
-                        { "@userId", userId },
-                        { "@card1Id", Guid.Parse(cardIds[0]) },
-                        { "@card2Id", Guid.Parse(cardIds[1]) },
-                        { "@card3Id", Guid.Parse(cardIds[2]) },
-                        { "@card4Id", Guid.Parse(cardIds[3]) }
-                    });
-                    Console.WriteLine("Neues Deck eingefügt.");
-
-                    // 5. Aktualisiere die `user_stacks`-Tabelle
-                    // Setze alle Karten von diesem Benutzer auf FALSE
-                    string resetInDeckQuery = "UPDATE user_stacks SET in_deck = FALSE WHERE userid = @userId;";
-                    ExecuteNonQuery(resetInDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
-                    Console.WriteLine("Alle Karten auf in_deck = FALSE gesetzt.");
-
-                    // Setze die ausgewählten Karten auf TRUE
-                    string updateInDeckQuery = "UPDATE user_stacks SET in_deck = TRUE WHERE userid = @userId AND card_id = ANY(@cardIds);";
-                    ExecuteNonQuery(updateInDeckQuery, new Dictionary<string, object>
-                    {
-                        { "@userId", userId },
-                        { "@cardIds", cardIds.Select(Guid.Parse).ToArray() }
-                    });
-                    Console.WriteLine("Ausgewählte Karten auf in_deck = TRUE gesetzt.");
-
-                    // 6. Commit der Transaktion
-                    transaction.Commit();
-                    Console.WriteLine("Deck-Konfiguration erfolgreich abgeschlossen.");
                 }
-                catch (Exception ex)
+
+                Console.WriteLine($"Card type counts: Monsters = {cardTypes["monster"]}, Spells = {cardTypes["spell"]}");
+
+                // Einschränkungen prüfen
+                if (cardTypes["monster"] != 2 || cardTypes["spell"] != 2)
                 {
-                    // Fehlerbehandlung und Rollback der Transaktion
-                    transaction.Rollback();
-                    Console.WriteLine($"Error configuring deck: {ex.Message}");
-                    throw;
+                    throw new Exception("You must configure exactly 2 monsters and 2 spells in your deck.");
                 }
+
+                // Bestehendes Deck löschen
+                var deleteDeckCommand = new NpgsqlCommand(@"
+                    DELETE FROM decks
+                    WHERE userid = (SELECT userid FROM users WHERE username = @username);", connection);
+                deleteDeckCommand.Parameters.AddWithValue("username", username);
+                deleteDeckCommand.ExecuteNonQuery();
+
+                // Neues Deck einfügen
+                var insertDeckCommand = new NpgsqlCommand(@"
+                    INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
+                    VALUES (
+                        (SELECT userid FROM users WHERE username = @username),
+                        @card1::uuid, @card2::uuid, @card3::uuid, @card4::uuid);", connection);
+
+                insertDeckCommand.Parameters.AddWithValue("username", username);
+                insertDeckCommand.Parameters.AddWithValue("card1", Guid.Parse(cardIds[0]));
+                insertDeckCommand.Parameters.AddWithValue("card2", Guid.Parse(cardIds[1]));
+                insertDeckCommand.Parameters.AddWithValue("card3", Guid.Parse(cardIds[2]));
+                insertDeckCommand.Parameters.AddWithValue("card4", Guid.Parse(cardIds[3]));
+                insertDeckCommand.ExecuteNonQuery();
+
+                // Kartenstatus aktualisieren
+                var updateCardsCommand = new NpgsqlCommand(@"
+                    UPDATE user_stacks
+                    SET in_deck = TRUE
+                    WHERE userid = (SELECT userid FROM users WHERE username = @username)
+                      AND card_id = ANY(@cardIds::uuid[]);", connection);
+                updateCardsCommand.Parameters.AddWithValue("username", username);
+                updateCardsCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
+                updateCardsCommand.ExecuteNonQuery();
+
+                Console.WriteLine("Deck configured successfully.");
             }
         }
+
 
 
 

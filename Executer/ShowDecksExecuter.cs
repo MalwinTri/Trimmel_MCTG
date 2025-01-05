@@ -148,7 +148,7 @@ namespace Trimmel_MCTG.Execute
             {
                 Console.WriteLine($"Fehler in ConfigureDeckFromPayload: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
-                response.StatusCode = StatusCode.InternalServerError;
+                response.StatusCode = StatusCode.BadRequest;
             }
 
             return response;

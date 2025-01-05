@@ -200,7 +200,7 @@ echo.
 curl -i -X GET http://localhost:10001/deck --header "Authorization: Bearer kienboec-mtcgToken"
 echo "Should return HTTP 200 - and a list of all cards"
 echo.
-curl -i -X PUT http://localhost:10001/deck --header "Content-Type: application/json" --header "Authorization: Bearer altenhof-mtcgToken" -d "[\"aa9999a0-734c-49c6-8f4a-651864b14e62\", \"d6e9c720-9b5a-40c7-a6b2-bc34752e3463\", \"d60e23cf-2238-4d49-844f-c7589ee5342e\", \"02a9c76e-b17d-427f-9240-2dd49b0d3bfd\"]"
+curl -i -X PUT http://localhost:10001/deck --header "Content-Type: application/json" --header "Authorization: Bearer altenhof-mtcgToken" -d "[\"aa9999a0-734c-49c6-8f4a-651864b14e62\", \"d6e9c720-9b5a-40c7-a6b2-bc34752e3463\", \"d60e23cf-2238-4d49-844f-c7589ee5342e\", \"a1618f1e-4f4c-4e09-9647-87e16f1edd2d\"]"
 echo "Should return HTTP 2xx"
 echo.
 curl -i -X GET http://localhost:10001/deck --header "Authorization: Bearer altenhof-mtcgToken"
