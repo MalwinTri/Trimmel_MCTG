@@ -6,9 +6,9 @@ namespace Trimmel_MCTG.DB
 {
     public class Trading
     {
-        public Guid TradingId { get; set; } // Ändern von int zu Guid
+        public Guid TradingId { get; set; } 
         public int UserId { get; set; }
-        public Guid OfferedCardId { get; set; } // Ändern von int zu Guid
+        public Guid OfferedCardId { get; set; } 
         public string RequiredType { get; set; }
         public int MinDamage { get; set; }
 
@@ -54,14 +54,14 @@ namespace Trimmel_MCTG.DB
                 { "@minDamage", MinDamage }
             };
 
-            if (TradingId == Guid.Empty) // Neuer Trading-Eintrag
+            if (TradingId == Guid.Empty)
             {
                 db.ExecuteNonQuery(
                     "INSERT INTO trading (userid, offered_card_id, required_type, min_damage) VALUES (@userid, @offeredCardId, @requiredType, @minDamage)",
                     parameters
                 );
             }
-            else // Existierender Trading-Eintrag
+            else 
             {
                 parameters["@tradingId"] = TradingId;
                 db.ExecuteNonQuery(

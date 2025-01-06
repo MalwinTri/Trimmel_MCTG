@@ -12,15 +12,13 @@ namespace Trimmel_MCTG.HTTP
 {
     public class Route : IRoute
     {
-        // Dictionary zur Routenverwaltung
+
         private readonly Dictionary<(HttpMethod method, string resourcePath), Func<RequestContext, IRouteCommand>> routes;
 
-        // Implementierung von IRoute, bei Bedarf anpassen
         Route IRoute.Route { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
         public Route()
         {
-            // Initialisiere alle bekannten Routen
             routes = new Dictionary<(HttpMethod, string), Func<RequestContext, IRouteCommand>>
             {
                 { (HttpMethod.Post, "/users"), request => new RegisterExecuter(request) },
@@ -46,10 +44,8 @@ namespace Trimmel_MCTG.HTTP
                 throw new ArgumentNullException(nameof(request), "Request cannot be null.");
             }
 
-            // Entferne Query-Parameter vom ResourcePath (falls vorhanden)
             var cleanResourcePath = request.ResourcePath.Split('?')[0];
 
-            // Spezialfall für /users/{username}
             if (cleanResourcePath.StartsWith("/users/"))
             {
                 var parts = cleanResourcePath.Split('/');
@@ -67,33 +63,28 @@ namespace Trimmel_MCTG.HTTP
                 }
             }
 
-            // *** Spezialfall für /tradings/{id} (DELETE) ***
             if (cleanResourcePath.StartsWith("/tradings/") && request.Method == HttpMethod.Delete)
             {
                 var parts = cleanResourcePath.Split('/');
                 if (parts.Length == 3)
                 {
-                    var tradingId = parts[2]; // Hier steht dein GUID-String
+                    var tradingId = parts[2]; 
                     return new DeleteTradingDealExecuter(request, tradingId);
                 }
             }
 
-            // In Route.cs
             if (cleanResourcePath.StartsWith("/tradings/") && request.Method == HttpMethod.Post)
             {
                 var parts = cleanResourcePath.Split('/');
                 if (parts.Length == 3)
                 {
                     var tradingId = parts[2];
-                    // Hier rufst du den passenden Executer auf
                     return new TradeExecuter(request);
                 }
             }
 
-            // Überprüfe, ob eine passende Route im Dictionary existiert
             if (routes.TryGetValue((request.Method, cleanResourcePath), out var routeHandler))
             {
-                // Token-Validierung für "geschützte" Routen (optional anpassen)
                 if (cleanResourcePath != "/users" && cleanResourcePath != "/sessions")
                 {
                     if (string.IsNullOrEmpty(request.Token))
@@ -103,7 +94,6 @@ namespace Trimmel_MCTG.HTTP
                     }
                 }
 
-                // Routenhandler ausführen
                 return routeHandler(request);
             }
 
@@ -111,8 +101,6 @@ namespace Trimmel_MCTG.HTTP
             return null;
         }
 
-
-        // Diese Methode stellt sicher, dass der Payload-Body nicht null ist
         private string EnsureBody(string? body)
         {
             if (body == null)
@@ -122,7 +110,6 @@ namespace Trimmel_MCTG.HTTP
             return body;
         }
 
-        // Deserialisiert den JSON-Body in das angegebene Typ-Objekt
         private T Deserialize<T>(string? body) where T : class
         {
             if (string.IsNullOrEmpty(body))

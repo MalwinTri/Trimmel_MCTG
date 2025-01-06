@@ -13,7 +13,6 @@ namespace Trimmel_MCTG.HTTP
 
         public HttpClient(TcpClient connection)
         {
-            // Initialisiert die TCP-Verbindung für den Client
             this.connection = connection ?? throw new ArgumentNullException(nameof(connection));
         }
 
@@ -27,7 +26,6 @@ namespace Trimmel_MCTG.HTTP
 
         public RequestContext? ReceiveRequest()
         {
-            // Puffer, um empfangene Daten zu speichern
             var buffer = new byte[1024];
             var stream = connection.GetStream();
             int bytesRead = stream.Read(buffer, 0, buffer.Length);
@@ -37,11 +35,8 @@ namespace Trimmel_MCTG.HTTP
                 return null;
             }
 
-            // Konvertiere die empfangenen Bytes in einen String (UTF-8)
             var requestString = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-            //Console.WriteLine("Request Received: " + requestString);
 
-            // Parsen der Anfrage und zurückgeben des RequestContext-Objekts
             return ParseRequest(requestString);
         }
 
@@ -52,28 +47,22 @@ namespace Trimmel_MCTG.HTTP
             string responseString;
             if (response.StatusCode == StatusCode.Created)
             {
-                // Erstelle die Antwort, wenn der Status "Created" ist
                 responseString = $"{GetHttpStatusCode(response.StatusCode)}\r\n" +
                                  "User created successfully";
             }
             else
             {
-                // Erstelle die Antwort für alle anderen Statuscodes
                 responseString = $"{GetHttpStatusCode(response.StatusCode)}\r\n" +
                                  $"{response.Payload}";
             }
 
             var responseBytes = Encoding.UTF8.GetBytes(responseString);
 
-            // Sende die Antwort an den Client
             stream.Write(responseBytes, 0, responseBytes.Length);
             stream.Flush();
-
-            //Console.WriteLine("Response Sent: " + responseString);
         }
 
-        // Diese Methode gibt den HTTP-Statuscode als String zurück
-        // Komischerweise funktioniert es nur hier wenn ich den Response Code zurückbekommen will. Deswegen derzeit in MethodUltitlies auskommentiert
+
         private string GetHttpStatusCode(StatusCode statusCode)
         {
             return statusCode switch
@@ -93,7 +82,6 @@ namespace Trimmel_MCTG.HTTP
             };
         }
 
-        // Parst die Anfrage-String und erstellt ein RequestContext-Objekt
         private RequestContext? ParseRequest(string requestString)
         {
             var lines = requestString.Split("\r\n");
@@ -105,7 +93,6 @@ namespace Trimmel_MCTG.HTTP
                     var methodString = parts[0];
                     var path = parts[1];
 
-                    // Headers verarbeiten
                     var headers = new Dictionary<string, string>();
                     int i = 1;
                     while (!string.IsNullOrWhiteSpace(lines[i]))
@@ -118,10 +105,8 @@ namespace Trimmel_MCTG.HTTP
                         i++;
                     }
 
-                    // Prüfe, ob die Methode ein gültiges HttpMethod-Enum ist
                     if (Enum.TryParse<HttpMethod>(methodString, true, out var method))
                     {
-                        // Angenommen, dass POST-Anfragen einen Body haben, der nach einer Leerzeile kommt
                         var body = lines.Skip(i + 1).FirstOrDefault();
 
                         return new RequestContext(headers, body, method, path);

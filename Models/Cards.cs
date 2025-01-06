@@ -13,8 +13,8 @@ namespace Trimmel_MCTG.DB
         [JsonProperty("Name")]
         public string Name { get; set; }
         public double Damage { get; set; }
-        public string ElementType { get; set; } // fire, water, normal
-        public string CardType { get; set; } // monster, spell
+        public string ElementType { get; set; } 
+        public string CardType { get; set; } 
         public bool InDeck { get; set; }
 
         public Cards(Guid cardId, string name, double damage, string elementType, string cardType, bool inDeck = false)

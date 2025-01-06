@@ -17,14 +17,14 @@ namespace Trimmel_MCTG.HTTP
     {
         private readonly TcpListener tcpListener;
         private readonly Route route;
-        private readonly Database db; // Gemeinsame Datenbankinstanz
+        private readonly Database db; 
         private bool listener;
 
         public HttpServer(IPAddress address, int port, Route route)
         {
             tcpListener = new TcpListener(address, port);
             this.route = route;
-            db = new Database(); // Erstellen einer einzigen gemeinsamen Datenbankverbindung
+            db = new Database(); 
         }
 
         public HttpMethod HttpMethod
@@ -51,7 +51,6 @@ namespace Trimmel_MCTG.HTTP
                         var connection = tcpListener.AcceptTcpClient();
                         Console.WriteLine("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
 
-                        // Verwenden des ThreadPools zum Handling der Clients
                         ThreadPool.QueueUserWorkItem(HandleClient, connection);
                     }
                     catch (SocketException ex)
@@ -90,7 +89,7 @@ namespace Trimmel_MCTG.HTTP
 
                     if (request != null)
                     {
-                        LogRequest(request); // Konsolidierte Protokollierung der Anfrage
+                        LogRequest(request); 
                     }
 
                     if (request == null)
@@ -134,7 +133,7 @@ namespace Trimmel_MCTG.HTTP
                         }
                     }
 
-                    LogResponse((int)response.StatusCode, response.Payload ?? string.Empty); // Konsolidierte Protokollierung der Antwort
+                    LogResponse((int)response.StatusCode, response.Payload ?? string.Empty);
                 }
             }
             catch (SocketException ex)
@@ -161,7 +160,7 @@ namespace Trimmel_MCTG.HTTP
                 Console.WriteLine($"Payload: {request.Payload}");
             }
 
-            Console.WriteLine(); // Leerzeile für bessere Lesbarkeit
+            Console.WriteLine(); 
         }
 
         private static void LogResponse(int statusCode, string message)
@@ -180,7 +179,6 @@ namespace Trimmel_MCTG.HTTP
 
         public void Stop()
         {
-            // Beenden des TcpListener
             listener = false;
             tcpListener.Stop();
             Console.WriteLine("Server has stopped listening for requests.");
