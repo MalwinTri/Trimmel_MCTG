@@ -39,7 +39,7 @@ namespace Trimmel_MCTG.HTTP
 
             // Konvertiere die empfangenen Bytes in einen String (UTF-8)
             var requestString = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-            Console.WriteLine("Request Received: " + requestString);
+            //Console.WriteLine("Request Received: " + requestString);
 
             // Parsen der Anfrage und zurückgeben des RequestContext-Objekts
             return ParseRequest(requestString);
@@ -69,7 +69,7 @@ namespace Trimmel_MCTG.HTTP
             stream.Write(responseBytes, 0, responseBytes.Length);
             stream.Flush();
 
-            Console.WriteLine("Response Sent: " + responseString);
+            //Console.WriteLine("Response Sent: " + responseString);
         }
 
         // Diese Methode gibt den HTTP-Statuscode als String zurück

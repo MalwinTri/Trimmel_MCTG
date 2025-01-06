@@ -119,7 +119,5 @@ namespace Trimmel_MCTG.DB
                 row["card_type"].ToString()
             );
         }
-
-
     }
 }

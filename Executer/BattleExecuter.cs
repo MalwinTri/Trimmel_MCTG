@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Trimmel_MCTG.helperClass;
 
 public class BattleExecuter : IRouteCommand
 {
@@ -108,7 +109,15 @@ public class BattleExecuter : IRouteCommand
     // Hier starten wir den eigentlichen Kampf
     private void StartBattle(Users player1, Users player2)
     {
-        Console.WriteLine($"Kampf zwischen {player1.Username} und {player2.Username} gestartet.");
+        Console.WriteLine($"Figth between {player1.Username} and {player2.Username} starting.");
+
+        int battleId = db.InsertBattle(player1.UserId, player2.UserId);
+
+        if (battleId == -1)
+        {
+            Console.WriteLine("Failed to insert battle into database.");
+            return;
+        }
 
         // Hole das Deck beider Spieler aus der DB. 
         // Angenommen, db.GetConfiguredDeck(...) liefert eine Liste von bis zu 20 Karten.
@@ -119,7 +128,7 @@ public class BattleExecuter : IRouteCommand
         var result = DoBattle(player1, player2);
 
             
-        Console.WriteLine($"{result.Winner.Username} hat gewonnen!");
+        Console.WriteLine($"{result.Winner.Username} has won!");
 
         // Stats anpassen (Wins, Losses, Elo)
         UpdateStats(result.Winner, true);
@@ -133,11 +142,12 @@ public class BattleExecuter : IRouteCommand
     // mit Deck & Hand-Mechanik
     private BattleResult DoBattle(Users player1, Users player2)
     {
-        Console.WriteLine($"Kampf zwischen {player1.Username} und {player2.Username} gestartet.");
+        Console.WriteLine($"Fight between {player1.Username} and {player2.Username} starting.");
 
-        // Lade die konfigurierten Decks beider Spieler
-        var deck1 = db.GetConfiguredDeck(player1.Username);
-        var deck2 = db.GetConfiguredDeck(player2.Username);
+
+        // Lade die gesamten Decks beider Spieler
+        var deck1 = db.GetAllDeckCards(player1.UserId);
+        var deck2 = db.GetAllDeckCards(player2.UserId);
 
         try
         {
@@ -149,120 +159,156 @@ public class BattleExecuter : IRouteCommand
             db.UpdateUserStats(result.Loser.UserId, false);
             db.UpdateElo(result.Winner.UserId, result.Loser.UserId);
 
+            // Weitere Aktionen wie das Stehlen von Karten werden bereits in ExecuteBattle behandelt
 
             return result;
         }
         catch (Exception ex)
         {
-            // Rollback bei Fehler 
+            // Fehler protokollieren
             battleLog.AppendLine($"[ERROR] {DateTime.Now:HH:mm:ss} - {ex.Message}");
             throw;
         }
     }
 
+
     // ---------------------------------------
     // Das Herzstück der erweiterten Kampf-Logik
     // mit Deck & Hand-Mechanik
-    private BattleResult ExecuteBattle(Users p1, List<Cards> deck1, Users p2, List<Cards> deck2)
+    private BattleResult ExecuteBattle(Users p1, List<Cards> userStacks1, Users p2, List<Cards> userStacks2)
     {
-        // Jede Runde haben die Spieler eine "Hand" mit bis zu 4 Karten
+        // Initialisiere Hand und Deck für beide Spieler
         var hand1 = new List<Cards>();
+        var deck1 = new List<Cards>(userStacks1); // Kopie der UserStacks als Deck
         var hand2 = new List<Cards>();
+        var deck2 = new List<Cards>(userStacks2); // Kopie der UserStacks als Deck
 
-        // Vor dem Kampf kann man sicherstellen, dass das Deck max. 20 Karten hat:
+        // Begrenze das Deck auf maximal 20 Karten (optional)
         if (deck1.Count > 20) deck1 = deck1.Take(20).ToList();
         if (deck2.Count > 20) deck2 = deck2.Take(20).ToList();
 
-        // Zieht anfangs bis zu 4 Karten auf die Hand
-        DrawHand(deck1, hand1, p1.UserId);
-        DrawHand(deck2, hand2, p2.UserId);
+        // Ziehe die Anfangshand (z.B. 4 Karten) aus dem Deck
+        DrawInitialHand(deck1, hand1, p1.UserId);
+        DrawInitialHand(deck2, hand2, p2.UserId);
 
-        while (true)
+        int roundNumber = 1;
+        int maxRounds = 100; // Optional: Maximale Rundenanzahl, um Endlosschleifen zu vermeiden
+
+        while (roundNumber <= maxRounds)
         {
-            // Check, ob jemand bereits verloren hat (Deck + Hand leer)
+            battleLog.AppendLine($"\n--- Runde {roundNumber} ---");
+
+            // Überprüfe, ob ein Spieler verloren hat
             if (deck1.Count == 0 && hand1.Count == 0)
             {
-                // p1 hat verloren, p2 gewinnt
                 var result = EndBattle(p2, p1, deck2, deck1);
+                battleLog.AppendLine($"**{p2.Username} won the Fight!**");
                 return result;
             }
             if (deck2.Count == 0 && hand2.Count == 0)
             {
-                // p2 hat verloren, p1 gewinnt
                 var result = EndBattle(p1, p2, deck1, deck2);
+                battleLog.AppendLine($"**{p1.Username} won the Fight!!**");
                 return result;
             }
 
-            // Vor jeder Runde erneut auf 4 Handkarten auffüllen (falls im Deck noch was ist)
+            //// Fülle die Hand auf (z.B. 4 Karten) aus dem Deck
             DrawHand(deck1, hand1, p1.UserId);
             DrawHand(deck2, hand2, p2.UserId);
 
-            // Prüfe erneut, ob die Spieler Karten haben
+            // Überprüfe erneut, ob ein Spieler keine Karten mehr hat
             if (hand1.Count == 0 && deck1.Count == 0)
             {
                 var result = EndBattle(p2, p1, deck2, deck1);
+                battleLog.AppendLine($"**{p2.Username} won the Fight!!**");
                 return result;
             }
             if (hand2.Count == 0 && deck2.Count == 0)
             {
                 var result = EndBattle(p1, p2, deck1, deck2);
+                battleLog.AppendLine($"**{p1.Username} won the Fight!!**");
                 return result;
             }
 
-            // 1) Jeder wählt 1 Monster + 0..2 Spells von seiner Hand
+            // Jeder Spieler wählt ein Monster und 0-2 Spells aus der Hand
             var (p1Monster, p1Spells) = ChooseMonsterAndSpells(hand1);
             var (p2Monster, p2Spells) = ChooseMonsterAndSpells(hand2);
 
             if (p1Monster == null || p2Monster == null)
             {
-                // Falls einer kein Monster hat -> checke erneut Deck+Hand?
-                // Dann Abbruch.
-                if (deck1.Count == 0 && hand1.Count == 0)
-                    return EndBattle(p2, p1, deck2, deck1);
-                if (deck2.Count == 0 && hand2.Count == 0)
-                    return EndBattle(p1, p2, deck1, deck2);
-
-                // Sonst machst du eine alternative Regel. Hier brechen wir den Kampf ab.
-                battleLog.AppendLine("   -> Einer der Spieler kann kein Monster spielen. Kampf wird abgebrochen.");
+                // Falls einer kein Monster hat, breche den Kampf ab
+                battleLog.AppendLine("   -> One of the players cannot play a monster. Fight is canceled.");
                 break;
             }
 
-            // 2) Schaden berechnen
+            // Berechne den Schaden
             double dmg1 = CalculateDamage(p1, p1Monster, p1Spells, p2, p2Monster, p2Spells);
             double dmg2 = CalculateDamage(p2, p2Monster, p2Spells, p1, p1Monster, p1Spells);
 
-            // Log the played cards and spells
-            string p1SpellsNames = p1Spells.Count > 0 ? string.Join(", ", p1Spells.Select(s => s.Name)) : "keine";
-            string p2SpellsNames = p2Spells.Count > 0 ? string.Join(", ", p2Spells.Select(s => s.Name)) : "keine";
+            // Logge die gespielten Karten und Spells
+            string p1SpellsNames = p1Spells.Count > 0 ? string.Join(", ", p1Spells.Select(s => s.Name)) : "no";
+            string p2SpellsNames = p2Spells.Count > 0 ? string.Join(", ", p2Spells.Select(s => s.Name)) : "no";
 
-            battleLog.AppendLine($"-> {p1.Username} spielt {p1Monster.Name} + {p1Spells.Count} Spells ({p1SpellsNames}) => {dmg1:F2}");
-            battleLog.AppendLine($"-> {p2.Username} spielt {p2Monster.Name} + {p2Spells.Count} Spells ({p2SpellsNames}) => {dmg2:F2}");
+            battleLog.AppendLine($"**{p1.Username} plays {p1Monster.Name} + {p1Spells.Count} Spells ({p1SpellsNames}) => {dmg1:F2} Damage**");
+            battleLog.AppendLine($"**{p2.Username} plays {p2Monster.Name} + {p2Spells.Count} Spells ({p2SpellsNames}) => {dmg2:F2} Damage**");
 
-            // 3) Runden-Ergebnis
+            // Bestimme das Ergebnis der Runde
             if (Math.Abs(dmg1 - dmg2) < 0.001)
             {
-                battleLog.AppendLine("   -> Unentschieden! Keine Karte wird entfernt.");
+                // **Unentschieden:** Zufälligen Gewinner bestimmen
+                Users randomWinner, randomLoser;
+                if (rand.Next(2) == 0)
+                {
+                    randomWinner = p1;
+                    randomLoser = p2;
+                }
+                else
+                {
+                    randomWinner = p2;
+                    randomLoser = p1;
+                }
+
+                // Wähle eine zufällige Karte aus der Hand des Verlierers, um sie zu entfernen
+                List<Cards> loserHand = randomLoser.UserId == p1.UserId ? hand1 : hand2;
+                if (loserHand.Count > 0)
+                {
+                    int cardIndex = rand.Next(loserHand.Count);
+                    Cards cardToRemove = loserHand[cardIndex];
+                    loserHand.RemoveAt(cardIndex);
+                    db.RemoveCardFromHand(randomLoser.UserId, cardToRemove.CardId);
+
+                    battleLog.AppendLine($"-> **Draw! {randomWinner.Username} wins the round by chance and removes {cardToRemove.Name} from {randomLoser.Username}.**");
+                }
+                else
+                {
+                    // Verlierer hat keine Karten mehr
+                    battleLog.AppendLine($"-> **Draw! {randomLoser.Username} has no more cards. {randomWinner.Username} wins the fight!**");
+                    return new BattleResult { Winner = randomWinner, Loser = randomLoser };
+                }
             }
             else if (dmg1 > dmg2)
             {
-                battleLog.AppendLine($"   -> {p1.Username} gewinnt die Runde! {p2Monster.Name} wird entfernt.");
+                battleLog.AppendLine($"-> **{p1.Username} won the round! {p2Monster.Name} will be removed.**");
                 hand2.Remove(p2Monster);
                 db.RemoveCardFromHand(p2.UserId, p2Monster.CardId);
             }
             else
             {
-                battleLog.AppendLine($"   -> {p2.Username} gewinnt die Runde! {p1Monster.Name} wird entfernt.");
+                battleLog.AppendLine($"-> **{p2.Username} wins the round! {p1Monster.Name} is removed.**");
                 hand1.Remove(p1Monster);
                 db.RemoveCardFromHand(p1.UserId, p1Monster.CardId);
             }
 
             battleLog.AppendLine();
+            roundNumber++;
         }
 
-        // Falls wir aus while(true) rausfallen, definieren wir einen Default:
-        var defaultResult = EndBattle(p1, p2, deck1, deck2);
-        return defaultResult;
+        // Falls die maximale Rundenanzahl erreicht wurde
+        var defaultResultEnd = EndBattle(p1, p2, deck1, deck2);
+        battleLog.AppendLine($"**{defaultResultEnd.Winner.Username} won the fight!**");
+        return defaultResultEnd;
     }
+
 
 
     // ---------------------------------------
@@ -277,46 +323,86 @@ public class BattleExecuter : IRouteCommand
             deck.RemoveAt(idx);
             hand.Add(card);
 
-            // Aktualisiere die Datenbank: Setze in_deck auf true (Handkarte)
-            db.UpdateCardStatus(userId, card.CardId, true);
-
-            battleLog.AppendLine($"{DateTime.Now:HH:mm:ss} - User '{userId}' zieht Karte '{card.Name}'.");
+            // Aktualisiere die Datenbank: Setze in_deck auf FALSE (Handkarte)
+            bool updateSuccess = db.UpdateCardStatus(userId, card.CardId, false);
+            if (updateSuccess)
+            {
+                battleLog.AppendLine($"{DateTime.Now:HH:mm:ss} - User '{userId}' draw Card '{card.Name}'");
+            }
+            else
+            {
+                battleLog.AppendLine($"{DateTime.Now:HH:mm:ss} - Error drawing card '{card.Name}' from user '{userId}'.");
+            }
         }
     }
+
+
+    private void DrawInitialHand(List<Cards> deck, List<Cards> hand, int userId)
+    {
+        const int initialHandSize = 4;
+        for (int i = 0; i < initialHandSize && deck.Count > 0; i++)
+        {
+            int idx = rand.Next(deck.Count);
+            var card = deck[idx];
+            deck.RemoveAt(idx);
+            hand.Add(card);
+
+            // Aktualisiere die Datenbank: Setze in_deck auf FALSE (Handkarte)
+            bool updateSuccess = db.UpdateCardStatus(userId, card.CardId, false);
+            if (updateSuccess)
+            {
+                Console.WriteLine($"User '{userId}' draws card '{card.Name}'.");
+            }
+            else
+            {
+                Console.WriteLine($"\r\nError drawing card '{card.Name}' for users '{userId}'.");
+            }
+        }
+    }
+
+
 
     // ---------------------------------------
     // Kampf-Ende: Gewinner klaut eine zufällige Karte vom Verlierer (+10 Coins / +5 Coins)
     private BattleResult EndBattle(Users winner, Users loser, List<Cards> winnerDeck, List<Cards> loserDeck)
     {
-        Console.WriteLine($"{winner.Username} hat gewonnen. {loser.Username} hat verloren.");
+        Console.WriteLine($"{winner.Username} has won. {loser.Username} has lost.");
+
+        loserDeck = db.GetAllDeckCards(loser.UserId);
 
         // 1) Karte klauen
         if (loserDeck.Count > 0)
         {
-            var rand = new Random();
-            int idx = rand.Next(loserDeck.Count);
-            var stolenCard = loserDeck[idx];
-            loserDeck.RemoveAt(idx);
+            var stolenCard = loserDeck[rand.Next(loserDeck.Count)];
+            loserDeck.Remove(stolenCard);
 
             winnerDeck.Add(stolenCard);
 
-            Console.WriteLine($"-> {winner.Username} stiehlt {stolenCard.Name} von {loser.Username}");
+            // Übertrage die Karte in die Datenbank
+            db.TransferCard(stolenCard.CardId, loser.UserId, winner.UserId);
+
+            battleLog.AppendLine($"   -> {winner.Username} steals {stolenCard.Name} from {loser.Username}");
         }
         else
         {
-            Console.WriteLine("-> Keine Karte zum Stehlen vorhanden!");
+            battleLog.AppendLine("   -> No card available to steal!");
         }
 
-        // 2) Coins anpassen (Beispielmethoden: db.GetUserCoins(), db.UpdateUserCoins() musst du selbst definieren)
+        // 2) Coins anpassen
         int winnerCoins = db.GetUserCoins(winner.Username);
         int loserCoins = db.GetUserCoins(loser.Username);
 
         db.UpdateUserCoins(winner.Username, winnerCoins + 10);
         db.UpdateUserCoins(loser.Username, loserCoins + 5);
 
+        battleLog.AppendLine($"   -> {winner.Username} receives 10 coins.");
+        battleLog.AppendLine($"   -> {loser.Username} receives 5 coins.");
+
         // Rückgabe des Ergebnisses 
         return new BattleResult { Winner = winner, Loser = loser };
     }
+
+
 
     // ---------------------------------------
     // Wählt 1 Monster + 0..2 Spells aus der Hand
@@ -355,11 +441,11 @@ public class BattleExecuter : IRouteCommand
         if (chosenSpells.Count > 0)
         {
             string spellsNames = string.Join(", ", chosenSpells.Select(s => s.Name));
-            battleLog.AppendLine($"      -> Gewählte Spells: {spellsNames}");
+            battleLog.AppendLine($"      -> Selected Spells: {spellsNames}");
         }
         else
         {
-            battleLog.AppendLine($"      -> Keine Spells gewählt.");
+            battleLog.AppendLine($"      -> No spells chosen.");
         }
 
         return (monster, chosenSpells);
@@ -371,7 +457,7 @@ public class BattleExecuter : IRouteCommand
     private double CalculateDamage(Users attacker, Cards attackerCard, List<Cards> attackerSpells, Users defender, Cards defenderCard, List<Cards> defenderSpells)
     {
         double baseDamage = attackerCard.Damage;
-        battleLog.AppendLine($"   -> Basis Schaden von {attackerCard.Name}: {baseDamage:F2}");
+        battleLog.AppendLine($"   -> Base damage from {attackerCard.Name}: {baseDamage:F2}");
 
         // Schaden durch Spells erhöhen (+20% pro Spell)
         if (attackerSpells != null && attackerSpells.Count > 0)
@@ -380,23 +466,23 @@ public class BattleExecuter : IRouteCommand
             {
                 double beforeSpell = baseDamage;
                 baseDamage *= 1.2;
-                battleLog.AppendLine($"   -> Spell '{spell.Name}' buffet den Schaden von {beforeSpell:F2} auf {baseDamage:F2}");
+                battleLog.AppendLine($"   -> Spell '{spell.Name}' buffet the damage of {beforeSpell:F2} on {baseDamage:F2}");
             }
         }
         else
         {
-            battleLog.AppendLine($"   -> Keine Spells gespielt, Schaden bleibt bei {baseDamage:F2}");
+            battleLog.AppendLine($"   -> No spells played, damage remains {baseDamage:F2}");
         }
 
         // Effektivitätsmultiplikator anwenden
         double multiplier = Effectiveness.GetDamageMultiplier(attackerCard.ElementType, defenderCard.ElementType);
         double beforeMultiplier = baseDamage;
         baseDamage *= multiplier;
-        battleLog.AppendLine($"   -> Effektivitätsmultiplikator ({attackerCard.ElementType} gegenüber {defenderCard.ElementType}): {multiplier} => Schaden: {baseDamage:F2}");
+        battleLog.AppendLine($"   -> Effectiveness multiplier ({attackerCard.ElementType} opposite {defenderCard.ElementType}): {multiplier} => Damage: {baseDamage:F2}");
 
         // Spezialfähigkeiten berücksichtigen
         double finalDamage = ApplySpecialAbilities(attackerCard, defenderCard, baseDamage);
-        battleLog.AppendLine($"   -> Endgültiger Schaden nach Spezialfähigkeiten: {finalDamage:F2}");
+        battleLog.AppendLine($"   -> Final damage after special abilities: {finalDamage:F2}");
         return finalDamage;
     }
 
@@ -541,10 +627,3 @@ public class BattleExecuter : IRouteCommand
 
 }
 
-// ---------------------------------------
-// Dein BattleResult-Klasse wie gehabt
-public class BattleResult
-{
-    public Users Winner { get; set; }
-    public Users Loser { get; set; }
-}

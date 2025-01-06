@@ -37,7 +37,7 @@ namespace Trimmel_MCTG.Execute
                 string[] tokenParts = requestContext.Token?.Split('-') ?? Array.Empty<string>();
                 if (tokenParts.Length == 0 || string.IsNullOrEmpty(tokenParts[0]))
                 {
-                    response.StatusCode = StatusCode.Unauthorized; // 401 Unauthorized
+                    response.StatusCode = StatusCode.Unauthorized;
                     response.Payload = "Authorization token is invalid or missing.";
                     return response;
                 }

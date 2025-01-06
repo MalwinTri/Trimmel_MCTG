@@ -39,22 +39,22 @@ namespace Trimmel_MCTG.Execute
 
                 // Benutzername aus Token extrahieren
                 string username = requestContext.Token.Split('-')[0];
-                Console.WriteLine($"Authentifizierter Benutzer: {username}");
+                //Console.WriteLine($"Authentifizierter Benutzer: {username}");
 
                 // Routen-Handling
-                Console.WriteLine($"Received ResourcePath: {requestContext.ResourcePath}");
-                if (requestContext.ResourcePath == "/deck/unconfigured")
-                {
-                    Console.WriteLine("Aufruf: /deck/unconfigured");
-                    return ShowUnconfiguredDeck(username);
-                }
+                // Console.WriteLine($"Received ResourcePath: {requestContext.ResourcePath}");
+                //if (requestContext.ResourcePath == "/deck/unconfigured")
+                //{
+                //    Console.WriteLine("Aufruf: /deck/unconfigured");
+                //    return ShowUnconfiguredDeck(username);
+                //}
 
                 // Konfigurierte Decks oder Deck-Konfiguration
                 var format = requestContext.QueryParameters?.ContainsKey("format") ?? false
                     ? requestContext.QueryParameters["format"]
                     : "json";
 
-                Console.WriteLine($"HTTP-Methode: {requestContext.Method}, Format: {format}");
+                //Console.WriteLine($"HTTP-Methode: {requestContext.Method}, Format: {format}");
 
                 return requestContext.Method switch
                 {

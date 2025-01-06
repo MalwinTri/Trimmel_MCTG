@@ -1,6 +1,7 @@
 ﻿using MCTG_Trimmel.HTTP;
 using Newtonsoft.Json;
 using Npgsql;
+using System.Data.Common;
 using System.Transactions;
 using Trimmel_MCTG.DB;
 using Trimmel_MCTG.Execute;
@@ -370,7 +371,7 @@ namespace Trimmel_MCTG.db
                     }
                 }
 
-                Console.WriteLine($"User {user.Username} registered successfully with initial stats and scoreboard entries.");
+                Console.WriteLine($"User {user.Username} registered successfully.");
                 return true;
             }
             catch (PostgresException ex)
@@ -439,7 +440,7 @@ namespace Trimmel_MCTG.db
                 if (count > 0)
                 {
                     // Statt Exception werfen -> einfach überspringen
-                    Console.WriteLine($"[InsertCard] Card with ID {card.CardId} already exists. Skipping insert...");
+                    // Console.WriteLine($"[InsertCard] Card with ID {card.CardId} already exists. Skipping insert...");
                     return;
                 }
             }
@@ -565,7 +566,7 @@ namespace Trimmel_MCTG.db
         /// <returns>Gezogene Karte oder null, wenn das Deck leer ist</returns>
         public Cards? DrawCard(int userId)
         {
-            // Wähle eine zufällige Karte aus dem Restdeck (in_deck = false)
+            // Wähle eine zufällige Karte aus dem Restdeck (in_deck = TRUE)
             string query = @"
                 SELECT card_id, name, damage, element_type, card_type
                 FROM user_stacks
@@ -593,13 +594,13 @@ namespace Trimmel_MCTG.db
                 double.Parse(row["damage"].ToString()),
                 row["element_type"].ToString(),
                 row["card_type"].ToString(),
-                inDeck: true
+                inDeck: false // Da die Karte jetzt in der Hand ist
             );
 
-            // Aktualisiere den Status der gezogenen Karte auf in_deck = true
+            // Aktualisiere den Status der gezogenen Karte auf in_deck = FALSE
             string updateQuery = @"
                 UPDATE user_stacks
-                SET in_deck = TRUE
+                SET in_deck = FALSE
                 WHERE userid = @userId AND card_id = @cardId;
             ";
 
@@ -613,6 +614,7 @@ namespace Trimmel_MCTG.db
 
             return drawnCard;
         }
+
 
         /// <summary>
         /// Ruft die Hand eines Benutzers basierend auf den Karten in der Decks-Tabelle ab.
@@ -693,7 +695,7 @@ namespace Trimmel_MCTG.db
         /// <param name="userId">ID des Benutzers</param>
         /// <param name="cardId">ID der Karte</param>
         /// <param name="inDeck">Neuer Status der Karte</param>
-        public void UpdateCardStatus(int userId, Guid cardId, bool inDeck)
+        public bool UpdateCardStatus(int userId, Guid cardId, bool inDeck)
         {
             string query = @"
                 UPDATE user_stacks
@@ -703,13 +705,23 @@ namespace Trimmel_MCTG.db
 
             var parameters = new Dictionary<string, object>
             {
+                { "@inDeck", inDeck },
                 { "@userId", userId },
-                { "@cardId", cardId },
-                { "@inDeck", inDeck }
+                { "@cardId", cardId }
             };
 
-            ExecuteNonQuery(query, parameters);
+            try
+            {
+                ExecuteNonQuery(query, parameters);
+                return true; // Erfolgreiches Update
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Datenbankfehler beim Aktualisieren des in_deck-Status: {ex.Message}");
+                return false; // Update fehlgeschlagen
+            }
         }
+
 
         /// <summary>
         /// Ruft das Restdeck eines Benutzers ab, ohne die Karten in der Hand.
@@ -722,7 +734,7 @@ namespace Trimmel_MCTG.db
                 SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
                 FROM user_stacks us
                 JOIN cards c ON us.card_id = c.card_id
-                WHERE us.userid = @userId;
+                WHERE us.userid = @userId AND us.in_deck = FALSE;
             ";
 
 
@@ -741,6 +753,9 @@ namespace Trimmel_MCTG.db
                 inDeck: false
             )).ToList();
         }
+
+       
+
 
         public void UpdateUserStats(int userId, bool won)
         {
@@ -811,11 +826,11 @@ namespace Trimmel_MCTG.db
 
         public void RemoveCardFromHand(int userId, Guid cardId)
         {
-            // Setze in_deck = false (oder entferne den Eintrag ganz, je nach Logik)
+            // Setze die Karte zurück in den verfügbaren Bereich (z.B. aus der Hand entfernen)
             string query = @"
                 UPDATE user_stacks
-                SET in_deck = false
-                WHERE userid = @userId AND card_id = @cardId;
+                SET in_deck = TRUE
+                WHERE userid = @userId AND card_id = @cardId AND in_deck = FALSE;
             ";
 
             var parameters = new Dictionary<string, object>
@@ -826,6 +841,7 @@ namespace Trimmel_MCTG.db
 
             ExecuteNonQuery(query, parameters);
         }
+
 
 
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -926,28 +942,26 @@ namespace Trimmel_MCTG.db
 
         public void InsertIntoDeck(Guid card1Id, Guid card2Id, Guid card3Id, Guid card4Id, string username)
         {
-            using (var transaction = conn.BeginTransaction())
+            try
             {
-                try
+                // 1. Holen Sie die User-ID
+                string userIdQuery = "SELECT userid FROM users WHERE username = @username;";
+                int userId = GetSingleValue<int>(userIdQuery, new Dictionary<string, object> { { "@username", username } });
+
+                if (userId == 0)
                 {
-                    // 1. Holen Sie die User-ID
-                    string userIdQuery = "SELECT userid FROM users WHERE username = @username;";
-                    int userId = GetSingleValue<int>(userIdQuery, new Dictionary<string, object> { { "@username", username } });
+                    throw new Exception("User not found.");
+                }
 
-                    if (userId == 0)
-                    {
-                        throw new Exception("User not found.");
-                    }
+                // 2. Lösche das bestehende Deck für den Benutzer
+                string deleteDeckQuery = "DELETE FROM decks WHERE userid = @userId;";
+                ExecuteNonQuery(deleteDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
 
-                    // 2. Lösche das bestehende Deck für den Benutzer
-                    string deleteDeckQuery = "DELETE FROM decks WHERE userid = @userId;";
-                    ExecuteNonQuery(deleteDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
-
-                    // 3. Füge das neue Deck ein
-                    string insertDeckQuery = @"
+                // 3. Füge das neue Deck ein
+                string insertDeckQuery = @"
                         INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
                         VALUES (@userId, @card1Id, @card2Id, @card3Id, @card4Id);";
-                    ExecuteNonQuery(insertDeckQuery, new Dictionary<string, object>
+                ExecuteNonQuery(insertDeckQuery, new Dictionary<string, object>
                     {
                         { "@userId", userId },
                         { "@card1Id", card1Id },
@@ -956,17 +970,17 @@ namespace Trimmel_MCTG.db
                         { "@card4Id", card4Id }
                     });
 
-                    // 4. Setze den Status `in_deck` in `user_stacks`
-                    // Setze alle Karten von diesem Benutzer auf FALSE
-                    string resetInDeckQuery = "UPDATE user_stacks SET in_deck = FALSE WHERE userid = @userId;";
-                    ExecuteNonQuery(resetInDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
+                // 4. Setze den Status `in_deck` in `user_stacks`
+                // Setze alle Karten von diesem Benutzer auf FALSE
+                string resetInDeckQuery = "UPDATE user_stacks SET in_deck = FALSE WHERE userid = @userId;";
+                ExecuteNonQuery(resetInDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
 
-                    // Setze die ausgewählten Karten auf TRUE
-                    string updateInDeckQuery = @"
+                // Setze die ausgewählten Karten auf TRUE
+                string updateInDeckQuery = @"
                         UPDATE user_stacks
                         SET in_deck = TRUE
                         WHERE userid = @userId AND card_id IN (@card1Id, @card2Id, @card3Id, @card4Id);";
-                    ExecuteNonQuery(updateInDeckQuery, new Dictionary<string, object>
+                ExecuteNonQuery(updateInDeckQuery, new Dictionary<string, object>
                     {
                         { "@userId", userId },
                         { "@card1Id", card1Id },
@@ -974,17 +988,11 @@ namespace Trimmel_MCTG.db
                         { "@card3Id", card3Id },
                         { "@card4Id", card4Id }
                     });
-
-                    // 5. Transaktion abschließen
-                    transaction.Commit();
-                }
-                catch (Exception ex)
-                {
-                    // Fehlerbehandlung und Rollback der Transaktion
-                    transaction.Rollback();
-                    Console.WriteLine($"Error inserting deck: {ex.Message}");
-                    throw;
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inserting deck: {ex.Message}");
+                throw;
             }
         }
 
@@ -1072,8 +1080,6 @@ namespace Trimmel_MCTG.db
             {
                 connection.Open();
 
-                Console.WriteLine($"Validating cards for user: {username}");
-
                 // Kartentypen validieren
                 var validateCardsCommand = new NpgsqlCommand(@"
                     SELECT c.card_id, c.card_type
@@ -1094,7 +1100,7 @@ namespace Trimmel_MCTG.db
                         var cardId = reader["card_id"].ToString();
                         var cardType = reader["card_type"].ToString();
 
-                        Console.WriteLine($"Card ID: {cardId}, Type: {cardType}");
+                        // Console.WriteLine($"Card ID: {cardId}, Type: {cardType}");
 
                         if (cardTypes.ContainsKey(cardType))
                         {
@@ -1103,7 +1109,7 @@ namespace Trimmel_MCTG.db
                     }
                 }
 
-                Console.WriteLine($"Card type counts: Monsters = {cardTypes["monster"]}, Spells = {cardTypes["spell"]}");
+                //Console.WriteLine($"Card type counts: Monsters = {cardTypes["monster"]}, Spells = {cardTypes["spell"]}");
 
                 // Einschränkungen prüfen
                 if (cardTypes["monster"] != 2 || cardTypes["spell"] != 2)
@@ -1149,6 +1155,7 @@ namespace Trimmel_MCTG.db
 
 
 
+
         // Zusätzliche Hilfsmethode zum Abrufen der Benutzerkarten
         private List<UserCard> GetUserCards(int userId, List<string> cardIds)
         {
@@ -1179,46 +1186,40 @@ namespace Trimmel_MCTG.db
 
         public void AddCardToDeck(int userId, Guid cardId)
         {
-            using (var transaction = conn.BeginTransaction())
+            try
             {
-                try
-                {
-                    // Prüfen, ob die Karte bereits in einem Deck ist
-                    string checkCardQuery = @"
+                // Prüfen, ob die Karte bereits in einem Deck ist
+                string checkCardQuery = @"
                         SELECT in_deck
                         FROM user_stacks
                         WHERE card_id = @cardId;";
 
-                    var inDeck = GetSingleValue<bool>(checkCardQuery, new Dictionary<string, object>
+                var inDeck = GetSingleValue<bool>(checkCardQuery, new Dictionary<string, object>
                     {
                         { "@cardId", cardId }
                     });
 
-                    if (inDeck)
-                    {
-                        throw new Exception($"Card {cardId} is already in a deck and cannot be selected again.");
-                    }
+                if (inDeck)
+                {
+                    throw new Exception($"Card {cardId} is already in a deck and cannot be selected again.");
+                }
 
-                    // Setze die Karte auf in_deck = 't'
-                    string updateCardQuery = @"
+                // Setze die Karte auf in_deck = 't'
+                string updateCardQuery = @"
                         UPDATE user_stacks
                         SET in_deck = 't'
                         WHERE card_id = @cardId AND userid = @userId;";
 
-                    ExecuteNonQuery(updateCardQuery, new Dictionary<string, object>
+                ExecuteNonQuery(updateCardQuery, new Dictionary<string, object>
                     {
                         { "@cardId", cardId },
                         { "@userId", userId }
                     });
-
-                    transaction.Commit();
-                }
-                catch (Exception ex)
-                {
-                    transaction.Rollback();
-                    Console.WriteLine($"Error adding card to deck: {ex.Message}");
-                    throw;
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error adding card to deck: {ex.Message}");
+                throw;
             }
         }
 
@@ -1282,6 +1283,24 @@ namespace Trimmel_MCTG.db
             }
         }
 
+        public void TransferCard(Guid cardId, int loserId, int winnerId)
+        {
+            string query = @"
+                UPDATE user_stacks
+                SET userid = @winnerId, in_deck = FALSE
+                WHERE userid = @loserId AND card_id = @cardId;
+            ";
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@winnerId", winnerId },
+                { "@loserId", loserId },
+                { "@cardId", cardId }
+            };
+
+            ExecuteNonQuery(query, parameters);
+        }
+
         public List<Cards> GetConfiguredDeck(string username)
         {
             string query = @"
@@ -1289,9 +1308,10 @@ namespace Trimmel_MCTG.db
                 FROM decks d
                 JOIN users u ON u.userid = d.userid
                 JOIN cards c ON c.card_id = ANY (ARRAY[d.card_1_id, d.card_2_id, d.card_3_id, d.card_4_id])
-                WHERE u.username = @username;";
+                WHERE u.username = @username;
+            ";
 
-                    var parameters = new Dictionary<string, object>
+            var parameters = new Dictionary<string, object>
             {
                 { "@username", username }
             };
@@ -1312,7 +1332,6 @@ namespace Trimmel_MCTG.db
                 row["card_type"].ToString()
             )).ToList();
         }
-
 
 
         public T? GetSingleValue<T>(string query, Dictionary<string, object>? parameters = null)
@@ -1379,10 +1398,10 @@ namespace Trimmel_MCTG.db
         {
             if (parameters != null && parameters.Count > 0)
             {
-                foreach (var param in parameters)
-                {
-                    Console.WriteLine($"    {param.Key} = {param.Value}");
-                }
+                //foreach (var param in parameters)
+                //{
+                //    Console.WriteLine($"    {param.Key} = {param.Value}");
+                //}
             }
 
             var results = new List<Dictionary<string, object>>();
@@ -1422,6 +1441,7 @@ namespace Trimmel_MCTG.db
         }
 
 
+
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         public UserData? GetUserData(string username)
@@ -1438,10 +1458,10 @@ namespace Trimmel_MCTG.db
                 return null;
             }
 
-            foreach (var kvp in result)
-            {
-                Console.WriteLine($"   {kvp.Key} = {kvp.Value}");
-            }
+            //foreach (var kvp in result)
+            //{
+            //    Console.WriteLine($"   {kvp.Key} = {kvp.Value}");
+            //}
 
             return new UserData
             {
@@ -1567,6 +1587,67 @@ namespace Trimmel_MCTG.db
 
             ExecuteNonQuery(queryWinner, new Dictionary<string, object> { { "@winner", winnerUsername } });
             ExecuteNonQuery(queryLoser, new Dictionary<string, object> { { "@loser", loserUsername } });
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public int InsertBattle(int user1Id, int user2Id)
+        {
+            string query = @"
+                INSERT INTO battles (user1id, user2id)
+                VALUES (@user1Id, @user2Id)
+                RETURNING battle_id;
+            ";
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("user1Id", user1Id);
+                    cmd.Parameters.AddWithValue("user2Id", user2Id);
+
+                    // ExecuteScalar gibt das erste Feld der ersten Zeile zurück
+                    var result = cmd.ExecuteScalar();
+                    return result != null ? Convert.ToInt32(result) : -1;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inserting battle: {ex.Message}");
+                throw;
+            }
+        }
+
+        public void UpdateBattleEnd(int battleId, int winnerId, string logs)
+        {
+            string query = @"
+                UPDATE battles
+                SET winnerid = @winnerId,
+                    end_time = CURRENT_TIMESTAMP,
+                    logs = @logs
+                WHERE battle_id = @battleId;
+            ";
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("winnerId", winnerId);
+                    cmd.Parameters.AddWithValue("logs", logs);
+                    cmd.Parameters.AddWithValue("battleId", battleId);
+
+                    int rowsAffected = cmd.ExecuteNonQuery();
+                    if (rowsAffected == 0)
+                    {
+                        Console.WriteLine($"No battle found with battle_id = {battleId}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating battle end: {ex.Message}");
+                throw;
+            }
         }
 
 
