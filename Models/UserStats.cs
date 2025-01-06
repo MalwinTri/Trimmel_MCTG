@@ -13,6 +13,14 @@ namespace Trimmel_MCTG.DB
 
         public Users? User { get; set; }
 
+        public Models.Scoreboard Scoreboard
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         public static UserStats LoadOrCreateStats(Database db, int userId)
         {
             var parameters = new Dictionary<string, object> { { "@userid", userId } };

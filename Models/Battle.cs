@@ -18,6 +18,14 @@ namespace Trimmel_MCTG.DB
         public Users? User2 { get; set; }
         public Users? Winner { get; set; }
 
+        public UserStats UserStats
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         public Battle(int user1Id, int user2Id)
         {
             User1Id = user1Id;

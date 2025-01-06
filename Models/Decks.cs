@@ -14,6 +14,14 @@ namespace Trimmel_MCTG.DB
         public Guid? Card3Id { get; set; }
         public Guid? Card4Id { get; set; }
 
+        public PackageCard PackageCard
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         // Konstruktor
         public Decks(int deckId, int userId, Guid? card1Id, Guid? card2Id, Guid? card3Id, Guid? card4Id)
         {

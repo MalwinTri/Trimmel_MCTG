@@ -10,6 +10,9 @@ namespace Trimmel_MCTG.HTTP
 {
     public interface IRouteCommand
     {
+        Database Database { get; set; }
+        Route Route { get; set; }
+
         Response Execute();
 
         void SetDatabase(Database db);

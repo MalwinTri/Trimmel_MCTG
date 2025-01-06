@@ -90,5 +90,13 @@ namespace Trimmel_MCTG.HTTP
             Console.WriteLine($"Token '{token}' konnte keiner UserId zugeordnet werden.");
             return null;
         }
+
+        public IRoute IRoute
+        {
+            get => default;
+            set
+            {
+            }
+        }
     }
 }

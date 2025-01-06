@@ -10,7 +10,7 @@ using Trimmel_MCTG.Models;
 
 namespace Trimmel_MCTG.db
 {
-    public class Database 
+    public class Database
     {
         private readonly NpgsqlConnection conn;
         // Connection String 
@@ -28,6 +28,22 @@ namespace Trimmel_MCTG.db
             {
                 Console.WriteLine($"Error opening database connection: {ex.Message}");
                 throw;
+            }
+        }
+
+        public Users Users
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public Cards Cards
+        {
+            get => default;
+            set
+            {
             }
         }
 
@@ -167,7 +183,7 @@ namespace Trimmel_MCTG.db
         public bool IsUserInDatabase(Users user)
         {
             try
-            {  
+            {
                 using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT username FROM users WHERE username = @username", conn))
                 {
                     cmd.Parameters.AddWithValue("username", user.Username);
@@ -1059,7 +1075,7 @@ namespace Trimmel_MCTG.db
         }
 
         public void RemoveCardFromHand(int userId, Guid cardId)
-        {  
+        {
             string query = @"
                 UPDATE user_stacks
                 SET in_deck = TRUE
@@ -1075,7 +1091,7 @@ namespace Trimmel_MCTG.db
             ExecuteNonQuery(query, parameters);
         }
 
-        
+
         public Cards? DrawCard(int userId)
         {
             string query = @"
@@ -1104,7 +1120,7 @@ namespace Trimmel_MCTG.db
                 double.Parse(row["damage"].ToString()),
                 row["element_type"].ToString(),
                 row["card_type"].ToString(),
-                inDeck: false 
+                inDeck: false
             );
 
             string updateQuery = @"
@@ -1398,15 +1414,15 @@ namespace Trimmel_MCTG.db
             try
             {
                 ExecuteNonQuery(query, parameters);
-                return true; 
+                return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Datenbankfehler beim Aktualisieren des in_deck-Status: {ex.Message}");
-                return false; 
+                return false;
             }
         }
-  
+
 
         public void InsertIntoDeck(Guid card1Id, Guid card2Id, Guid card3Id, Guid card4Id, string username)
         {

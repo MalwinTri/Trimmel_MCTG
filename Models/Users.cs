@@ -22,6 +22,38 @@ namespace Trimmel_MCTG.db
         public UserStats UserStats { get; set; }
         public Trading Trading { get; set; }
 
+        public Cards Cards
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public UserStack UserStack
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public Trading Trading1
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
+        public Battle Battle
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         public Users()
         {
             Deck = new Decks(0, 0, null, null, null, null);

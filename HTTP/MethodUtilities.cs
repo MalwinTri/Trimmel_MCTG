@@ -22,6 +22,14 @@ namespace Trimmel_MCTG.HTTP
             }
         }
 
+        public static MCTG_Trimmel.HTTP.StatusCode StatusCode
+        {
+            get => default;
+            set
+            {
+            }
+        }
+
         public static HttpMethod GetMethod(string method)
         {
             return method.ToUpperInvariant() switch

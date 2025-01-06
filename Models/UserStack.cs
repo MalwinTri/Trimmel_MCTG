@@ -24,7 +24,7 @@ namespace Trimmel_MCTG.DB
             }
         }
 
-        public db.Database Database
+        public Decks Decks
         {
             get => default;
             set
