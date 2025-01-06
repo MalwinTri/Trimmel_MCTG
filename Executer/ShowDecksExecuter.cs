@@ -83,19 +83,15 @@ namespace Trimmel_MCTG.Execute
             var response = new Response();
             try
             {
-                Console.WriteLine($"Abrufen des konfigurierten Decks für Benutzer: {username}");
                 var deckCards = db.GetConfiguredDeck(username);
-                Console.WriteLine($"Anzahl der Karten im Deck: {deckCards?.Count ?? 0}");
-
+               
                 if (deckCards == null || deckCards.Count == 0)
                 {
-                    Console.WriteLine("Deck ist leer.");
                     response.Payload = format == "plain" ? "Deck is empty." : JsonConvert.SerializeObject(new List<object>());
                     response.StatusCode = StatusCode.Ok;
                 }
                 else
-                {
-                    Console.WriteLine("Deck enthält Karten.");
+                {                
                     response.Payload = format == "plain"
                         ? FormatDeckAsPlainText(deckCards, username)
                         : JsonConvert.SerializeObject(deckCards);
@@ -104,7 +100,6 @@ namespace Trimmel_MCTG.Execute
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Fehler beim Abrufen des Decks: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
             }
@@ -146,7 +141,6 @@ namespace Trimmel_MCTG.Execute
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Fehler in ConfigureDeckFromPayload: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.BadRequest;
             }
@@ -161,25 +155,21 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                Console.WriteLine($"Abrufen des unkonfigurierten Decks für Benutzer: {username}");
                 var deckCards = db.ShowUnconfiguredDeck(username);
 
                 if (deckCards == null || deckCards.Count == 0)
                 {
-                    Console.WriteLine("Unkonfiguriertes Deck ist leer.");
                     response.Payload = JsonConvert.SerializeObject(new List<object>()); // Leeres JSON-Array
                     response.StatusCode = StatusCode.Ok;
                 }
                 else
                 {
-                    Console.WriteLine("Unkonfiguriertes Deck enthält Karten.");
                     response.Payload = JsonConvert.SerializeObject(deckCards);
                     response.StatusCode = StatusCode.Ok;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Fehler beim Abrufen des unkonfigurierten Decks: {ex.Message}");
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
             }

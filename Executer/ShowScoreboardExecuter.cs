@@ -27,14 +27,12 @@ public class ShowScoreboardExecuter : IRouteCommand
 
         try
         {
-            Console.WriteLine("Fetching scoreboard data...");
             var results = db.ExecuteQuery("SELECT * FROM scoreboard ORDER BY elo DESC", new Dictionary<string, object>());
 
-            Console.WriteLine($"Rows fetched: {results.Count}");
             var scoreboards = new List<Scoreboard>();
             foreach (var row in results)
             {
-                Console.WriteLine($"Processing row: {JsonConvert.SerializeObject(row)}");
+                //Console.WriteLine($"Processing row: {JsonConvert.SerializeObject(row)}");
                 scoreboards.Add(new Scoreboard
                 {
                     Id = Convert.ToInt32(row["id"]),

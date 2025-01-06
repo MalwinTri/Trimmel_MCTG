@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Trimmel_MCTG.db;
 
 namespace Trimmel_MCTG.DB
 {
@@ -11,27 +12,17 @@ namespace Trimmel_MCTG.DB
         public int BattleId { get; set; }
         public int User1Id { get; set; }
         public int User2Id { get; set; }
-        public int WinnerId { get; set; }
+        public int? WinnerId { get; set; } // Nullable, da es auch Unentschieden geben kann
 
-        public Users ?User1 { get; set; } 
-        public Users ?User2 { get; set; } 
-        public Users ?Winner { get; set; }
+        public Users? User1 { get; set; }
+        public Users? User2 { get; set; }
+        public Users? Winner { get; set; }
 
-        public Users User
+        // Konstruktor
+        public Battle(int user1Id, int user2Id)
         {
-            get => default;
-            set
-            {
-            }
-        }
-
-        public db.Database Database
-        {
-            get => default;
-            set
-            {
-            }
+            User1Id = user1Id;
+            User2Id = user2Id;
         }
     }
-
 }
