@@ -6,7 +6,7 @@ using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 using MCTG_Trimmel.HTTP;
 
-namespace Trimmel_MCTG.Executer
+namespace Trimmel_MCTG.Executer.trading
 {
     internal class ShowTradingDealsExecuter : IRouteCommand
     {
@@ -20,7 +20,7 @@ namespace Trimmel_MCTG.Executer
 
         public void SetDatabase(Database database)
         {
-            db = database; // Datenbankverbindung setzen
+            db = database;
         }
 
         public Response Execute()
@@ -29,10 +29,8 @@ namespace Trimmel_MCTG.Executer
 
             try
             {
-                // Alle Handelsangebote aus der Datenbank abrufen
                 var result = db.ExecuteQuery("SELECT * FROM trading", new Dictionary<string, object>());
 
-                // Liste von Trading-Angeboten erstellen
                 var tradingDeals = new List<object>();
 
                 foreach (var row in result)
@@ -47,7 +45,6 @@ namespace Trimmel_MCTG.Executer
                     });
                 }
 
-                // JSON-Antwort mit Handelsangeboten erstellen
                 response.Payload = JsonConvert.SerializeObject(tradingDeals);
                 response.StatusCode = StatusCode.Ok;
             }

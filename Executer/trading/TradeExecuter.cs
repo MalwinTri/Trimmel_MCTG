@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 using MCTG_Trimmel.HTTP;
+using Trimmel_MCTG.helperClass;
 
-namespace Trimmel_MCTG.Executer
+namespace Trimmel_MCTG.Executer.trading
 {
     internal class TradeExecuter : IRouteCommand
     {
@@ -28,7 +29,6 @@ namespace Trimmel_MCTG.Executer
 
             try
             {
-                // Prüfen, ob die URL auf ein bestimmtes Handelsangebot verweist
                 if (requestContext.ResourcePath.Contains("/tradings/"))
                 {
                     var pathParts = requestContext.ResourcePath.Split('/');
@@ -39,20 +39,17 @@ namespace Trimmel_MCTG.Executer
                         return response;
                     }
 
-                    // POST /tradings/{id} → Trade ausführen
-                    if (requestContext.Method == Trimmel_MCTG.HTTP.HttpMethod.Post)
+                    if (requestContext.Method == HTTP.HttpMethod.Post)
                     {
                         return ExecuteTrade(tradingId);
                     }
-                    // DELETE /tradings/{id} → Handel löschen
-                    else if (requestContext.Method == Trimmel_MCTG.HTTP.HttpMethod.Delete)
+                    else if (requestContext.Method == HTTP.HttpMethod.Delete)
                     {
                         return DeleteTrade(tradingId);
                     }
                 }
-                else if (requestContext.ResourcePath == "/tradings" && requestContext.Method == Trimmel_MCTG.HTTP.HttpMethod.Post)
+                else if (requestContext.ResourcePath == "/tradings" && requestContext.Method == HTTP.HttpMethod.Post)
                 {
-                    // POST /tradings → Handel erstellen
                     return CreateTradingDeal();
                 }
 
@@ -74,7 +71,6 @@ namespace Trimmel_MCTG.Executer
 
             try
             {
-                // Handelsangebot aus der Datenbank abrufen
                 var tradingDeal = db.ExecuteQuery(
                     "SELECT userid, offered_card_id, required_type, min_damage FROM trading WHERE tradingid = @tradingId::uuid",
                     new Dictionary<string, object> { { "@tradingId", tradingId } }
@@ -87,11 +83,9 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Benutzer-Informationen
                 string username = ExtractUsernameFromToken(requestContext.Token);
                 var user = Users.LoadFromDatabase(db, username);
 
-                // Überprüfen, ob Benutzer mit sich selbst handelt
                 if (user.UserId == Convert.ToInt32(tradingDeal["userid"]))
                 {
                     response.Payload = "You cannot trade with yourself.";
@@ -99,10 +93,8 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Extrahiere die angebotene Karte aus dem Request-Body
                 var offeredCardId = Guid.Parse(requestContext.Payload.Trim('"'));
 
-                // Überprüfen, ob der Benutzer die Karte besitzt
                 bool ownsCard = db.DoesUserOwnCard(username, offeredCardId);
 
                 if (!ownsCard)
@@ -112,7 +104,6 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Handelslogik: Tausche Karten, lösche das Handelsangebot
                 db.ExecuteNonQuery(
                     "DELETE FROM trading WHERE tradingid = @tradingId::uuid",
                     new Dictionary<string, object> { { "@tradingId", tradingId } }
@@ -129,7 +120,6 @@ namespace Trimmel_MCTG.Executer
 
             return response;
         }
-
 
 
 
@@ -170,7 +160,6 @@ namespace Trimmel_MCTG.Executer
 
             try
             {
-                // JSON-Body des Requests parsen
                 var payload = JsonConvert.DeserializeObject<TradingDealPayload>(requestContext.Payload);
                 if (payload == null)
                 {
@@ -179,7 +168,6 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Validierung der Eingabedaten
                 if (string.IsNullOrEmpty(payload.Id) ||
                     string.IsNullOrEmpty(payload.CardToTrade) ||
                     string.IsNullOrEmpty(payload.Type) ||
@@ -190,7 +178,6 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Überprüfen, ob der Benutzer existiert
                 string username = ExtractUsernameFromToken(requestContext.Token);
                 var user = Users.LoadFromDatabase(db, username);
                 if (user == null)
@@ -200,10 +187,9 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Handelsangebot in der Datenbank erstellen
                 var parameters = new Dictionary<string, object>
                 {
-                    { "@tradingId", Guid.Parse(payload.Id) }, // Übernimm die `Id` aus dem Request
+                    { "@tradingId", Guid.Parse(payload.Id) }, 
                     { "@userId", user.UserId },
                     { "@offeredCardId", Guid.Parse(payload.CardToTrade) },
                     { "@requiredType", payload.Type },
@@ -238,15 +224,6 @@ namespace Trimmel_MCTG.Executer
                 return parts[0];
 
             throw new InvalidOperationException("Invalid token format.");
-        }
-
-        // TradingDealPayload-Klasse zur Deserialisierung des JSON-Requests
-        private class TradingDealPayload
-        {
-            public string Id { get; set; } // Optional, wenn von der API mitgegeben
-            public string CardToTrade { get; set; }
-            public string Type { get; set; }
-            public int MinimumDamage { get; set; }
         }
     }
 }

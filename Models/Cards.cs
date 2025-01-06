@@ -29,7 +29,6 @@ namespace Trimmel_MCTG.DB
 
         public bool HasSpecialAbility()
         {
-            // Liste der Karten mit Spezialfähigkeiten
             var specialCards = new List<string>
         {
             "Goblin",
@@ -43,11 +42,6 @@ namespace Trimmel_MCTG.DB
         };
 
             return specialCards.Contains(this.Name);
-        }
-
-        public override string ToString()
-        {
-            return $"Card ID: {CardId}, Name: {Name}, Damage: {Damage}, Element: {ElementType}, Type: {CardType}";
         }
 
         public void SetElementType()
@@ -98,10 +92,9 @@ namespace Trimmel_MCTG.DB
                     return lowerCardType;
                 }
             }
-            return "monster"; // Default value if invalid
+            return "monster";
         }
 
-        // Hinzugefügte Methode zur Interaktion mit der Datenbank
         public static Cards LoadFromDatabase(Database db, Guid cardId)
         {
             var parameters = new Dictionary<string, object> { { "@cardId", cardId } };
@@ -118,6 +111,10 @@ namespace Trimmel_MCTG.DB
                 row["element_type"].ToString(),
                 row["card_type"].ToString()
             );
+        }
+        public override string ToString()
+        {
+            return $"Card ID: {CardId}, Name: {Name}, Damage: {Damage}, Element: {ElementType}, Type: {CardType}";
         }
     }
 }

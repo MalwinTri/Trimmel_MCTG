@@ -13,30 +13,24 @@ namespace Trimmel_MCTG.DB
 
         public Users? User { get; set; }
 
-        // Lädt oder erstellt die Statistiken eines Benutzers
         public static UserStats LoadOrCreateStats(Database db, int userId)
         {
             var parameters = new Dictionary<string, object> { { "@userid", userId } };
 
-            // Überprüfen, ob ein Eintrag in `userstats` für den Benutzer existiert
             var result = db.ExecuteQuery("SELECT * FROM userstats WHERE userid = @userid", parameters);
 
             if (result.Count == 0)
             {
-                // Wenn keine Statistiken vorhanden sind, Eintrag erstellen
                 db.ExecuteNonQuery(
                     "INSERT INTO userstats (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000)",
                     parameters
                 );
 
-                // Nach der Erstellung erneut abrufen
                 result = db.ExecuteQuery("SELECT * FROM userstats WHERE userid = @userid", parameters);
 
-                // Log optional hinzufügen
                 Console.WriteLine($"Created new stats entry for userId: {userId}");
             }
 
-            // Erwartet genau eine Zeile aus der Datenbank
             var row = result[0];
             return new UserStats
             {
@@ -48,9 +42,6 @@ namespace Trimmel_MCTG.DB
         }
 
 
-
-
-        // Aktualisieren der Statistiken
         public void SaveToDatabase(db.Database db)
         {
             var parameters = new Dictionary<string, object>

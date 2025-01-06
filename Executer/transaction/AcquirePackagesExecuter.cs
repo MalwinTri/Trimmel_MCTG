@@ -1,23 +1,17 @@
 ﻿using MCTG_Trimmel.HTTP;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Npgsql;
 using Trimmel_MCTG.db;
-using Trimmel_MCTG.HTTP;
 using Trimmel_MCTG.DB;
+using Trimmel_MCTG.HTTP;
 
-namespace Trimmel_MCTG.Execute
+namespace Trimmel_MCTG.Executer.transaction
 {
-    public class AcquirePackage : IRouteCommand
+    public class AcquirePackagesExecuter : IRouteCommand
     {
         private readonly RequestContext requestContext;
         private Database db;
 
-        public AcquirePackage(RequestContext requestContext)
+        public AcquirePackagesExecuter(RequestContext requestContext)
         {
             this.requestContext = requestContext;
         }
@@ -33,7 +27,6 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                // Extrahiere Benutzername aus Token
                 string[] tokenParts = requestContext.Token?.Split('-') ?? Array.Empty<string>();
                 if (tokenParts.Length == 0 || string.IsNullOrEmpty(tokenParts[0]))
                 {
@@ -44,32 +37,28 @@ namespace Trimmel_MCTG.Execute
 
                 string username = tokenParts[0];
 
-                // Überprüfe, ob Benutzer genug Coins hat
                 int userCoins = db.GetUserCoins(username);
                 if (userCoins < 5)
                 {
                     response.Payload = "Not enough coins to acquire a package.";
-                    response.StatusCode = StatusCode.BadRequest; // 400 Bad Request
+                    response.StatusCode = StatusCode.BadRequest; 
                     return response;
                 }
 
-                // Hol das nächste verfügbare Paket
                 var package = db.GetNextAvailablePackage();
                 if (package == null)
                 {
                     response.Payload = "No packages available.";
-                    response.StatusCode = StatusCode.NotFound; // 404 Not Found
+                    response.StatusCode = StatusCode.NotFound;
                     return response;
                 }
 
-                // Karten des Pakets dem Benutzer zuweisen
                 var packageCards = db.GetCardsByPackageId(package.PackageId);
                 foreach (var card in packageCards)
                 {
                     db.AssignCardToUser(username, card.CardId);
                 }
 
-                // Reduziere Benutzercoins
                 db.UpdateUserCoins(username, userCoins - 5);
 
                 // Lösche das Paket

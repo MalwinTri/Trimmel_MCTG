@@ -42,7 +42,6 @@ namespace Trimmel_MCTG.db
 
         public bool IsValidForUpdate()
         {
-            // Überprüft, ob Bio und Image die erwarteten Längen einhalten
             return (Bio == null || Bio.Length <= 500) &&
                    (Image == null || Image.Length <= 255);
         }
@@ -60,21 +59,6 @@ namespace Trimmel_MCTG.db
 
             db.ExecuteNonQuery(
                 "INSERT INTO users (username, password, coins, bio, image) VALUES (@Username, @Password, @Coins, @Bio, @Image)",
-                parameters
-            );
-        }
-
-        public void UpdateProfile(Database db)
-        {
-            var parameters = new Dictionary<string, object>
-            {
-                { "@UserId", UserId },
-                { "@Bio", Bio ?? string.Empty },
-                { "@Image", Image ?? string.Empty }
-            };
-
-            db.ExecuteNonQuery(
-                "UPDATE users SET bio = @Bio, image = @Image WHERE userid = @UserId",
                 parameters
             );
         }
@@ -117,12 +101,26 @@ namespace Trimmel_MCTG.db
                 Image = row["image"]?.ToString()
             };
 
-            // Laden des Decks und der Hand
             user.Deck = Decks.LoadUserDeck(db, user.UserId);
             user.Hand = db.GetUserHand(user.UserId, user.Deck.GetHandCardIds());
             user.DeckStack = db.GetUserDeckStack(user.UserId, user.Deck.GetHandCardIds());
 
             return user;
+        }
+
+        public void UpdateProfile(Database db)
+        {
+            var parameters = new Dictionary<string, object>
+            {
+                { "@UserId", UserId },
+                { "@Bio", Bio ?? string.Empty },
+                { "@Image", Image ?? string.Empty }
+            };
+
+            db.ExecuteNonQuery(
+                "UPDATE users SET bio = @Bio, image = @Image WHERE userid = @UserId",
+                parameters
+            );
         }
 
         public bool DeductCoins(int amount)
@@ -140,15 +138,10 @@ namespace Trimmel_MCTG.db
             Coins += amount;
         }
 
-        /// <summary>
-        /// Zieht eine Karte aus dem DeckStack und fügt sie der Hand hinzu.
-        /// </summary>
-        /// <param name="db">Datenbankverbindung</param>
-        /// <returns>Gezogene Karte oder null, wenn das Deck leer ist</returns>
-        public Cards? DrawCard(Database db)
+       public Cards? DrawCard(Database db)
         {
             if (Hand.Count >= 4)
-                return null; // Maximale Handgröße erreicht
+                return null; 
 
             Cards? drawnCard = db.DrawCard(UserId);
             if (drawnCard != null)
@@ -160,11 +153,6 @@ namespace Trimmel_MCTG.db
             return drawnCard;
         }
 
-        /// <summary>
-        /// Spielt eine Karte aus der Hand.
-        /// </summary>
-        /// <param name="cardId">ID der zu spielenden Karte</param>
-        /// <returns>Gezogene Karte oder null, wenn die Karte nicht gefunden wurde</returns>
         public Cards? PlayCard(Guid cardId)
         {
             var card = Hand.Find(c => c.CardId == cardId);

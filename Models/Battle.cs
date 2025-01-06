@@ -12,13 +12,12 @@ namespace Trimmel_MCTG.DB
         public int BattleId { get; set; }
         public int User1Id { get; set; }
         public int User2Id { get; set; }
-        public int? WinnerId { get; set; } // Nullable, da es auch Unentschieden geben kann
+        public int? WinnerId { get; set; } 
 
         public Users? User1 { get; set; }
         public Users? User2 { get; set; }
         public Users? Winner { get; set; }
 
-        // Konstruktor
         public Battle(int user1Id, int user2Id)
         {
             User1Id = user1Id;

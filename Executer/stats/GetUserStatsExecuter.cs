@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 
-namespace Trimmel_MCTG.Execute
+namespace Trimmel_MCTG.Executer.stats
 {
     public class GetUserStatsExecuter : IRouteCommand
     {
@@ -12,7 +12,7 @@ namespace Trimmel_MCTG.Execute
 
         public GetUserStatsExecuter(RequestContext request)
         {
-            this.requestContext = request;
+            requestContext = request;
         }
 
         public void SetDatabase(Database database)
@@ -26,10 +26,8 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                // Extrahiere Benutzername aus Token
                 string username = ExtractUsernameFromToken(requestContext.Token);
 
-                // Statistiken aus der Datenbank abrufen
                 var parameters = new Dictionary<string, object>
                 {
                     { "@username", username }

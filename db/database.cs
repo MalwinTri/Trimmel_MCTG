@@ -4,11 +4,13 @@ using Npgsql;
 using System.Data.Common;
 using System.Transactions;
 using Trimmel_MCTG.DB;
-using Trimmel_MCTG.Execute;
+using Trimmel_MCTG.Executer.user;
+using Trimmel_MCTG.helperClass;
+using Trimmel_MCTG.Models;
 
 namespace Trimmel_MCTG.db
 {
-    public class Database : IDisposable
+    public class Database 
     {
         private readonly NpgsqlConnection conn;
         // Connection String 
@@ -128,46 +130,50 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public void DropTables()
-        {
-            string dropTablesCommand = @"
-                DROP TABLE IF EXISTS trading;
-                DROP TABLE IF EXISTS battles;
-                DROP TABLE IF EXISTS decks;
-                DROP TABLE IF EXISTS packageCards;
-                DROP TABLE IF EXISTS packages;
-                DROP TABLE IF EXISTS userstats;
-                DROP TABLE IF EXISTS cards;
-                DROP TABLE IF EXISTS users;";
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //users 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        public bool CreateUser(Users user)
+        {
             try
             {
-                using (NpgsqlCommand cmd = new NpgsqlCommand(dropTablesCommand, conn))
+                if (IsUserInDatabase(user))
                 {
-                    cmd.ExecuteNonQuery();
-                    Console.WriteLine("All tables dropped successfully.");
+                    Console.WriteLine("User already exists.");
+                    return false;
+                }
+
+                string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins, token) VALUES (@username, @password, @coins, @token);", conn))
+                {
+                    cmd.Parameters.AddWithValue("username", user.Username);
+                    cmd.Parameters.AddWithValue("password", hashedPassword);
+                    cmd.Parameters.AddWithValue("coins", 20);
+
+                    int rowsAffected = cmd.ExecuteNonQuery();
+
+                    return rowsAffected > 0;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error dropping tables: {ex.Message}");
+                Console.WriteLine($"Error during user creation: {ex.Message}");
             }
+            return false;
         }
 
         public bool IsUserInDatabase(Users user)
         {
             try
-            {
-                // SQL-Befehl vorbereiten, um zu überprüfen, ob der Benutzer bereits in der Datenbank existiert
+            {  
                 using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT username FROM users WHERE username = @username", conn))
                 {
-                    // Füge den Benutzernamen als Parameter hinzu
                     cmd.Parameters.AddWithValue("username", user.Username);
 
-                    // Führe den SQL-Befehl aus und verwende einen Reader, um die Ergebnisse zu überprüfen
                     using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
-                        // Wenn der Reader Zeilen hat, existiert der Benutzer bereits
                         return reader.HasRows;
                     }
                 }
@@ -179,45 +185,176 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public bool CreateUser(Users user)
+        public bool CheckAndRegister(Users user)
         {
+            if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
+            {
+                Console.WriteLine("Invalid user information.");
+                return false;
+            }
+
+            if (IsUserInDatabase(user))
+            {
+                Console.WriteLine($"User {user.Username} already exists.");
+                return false;
+            }
+
             try
             {
-                // Überprüfe, ob der Benutzer bereits in der Datenbank vorhanden ist
-                if (IsUserInDatabase(user))
+                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
                 {
-                    Console.WriteLine("User already exists.");
-                    return false; // Beende die Methode und gib false zurück, wenn der Benutzer bereits existiert
+                    cmd.Parameters.AddWithValue("username", user.Username);
+                    string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                    cmd.Parameters.AddWithValue("password", hashedPassword);
+                    cmd.Parameters.AddWithValue("coins", user.Coins);
+
+                    cmd.ExecuteNonQuery();
                 }
 
-                // Hash das Passwort des Benutzers für die sichere Speicherung
-                string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                int userId = GetSingleValue<int>("SELECT userid FROM users WHERE username = @username;",
+                    new Dictionary<string, object> { { "@username", user.Username } });
 
-                //// Generiere einen benutzerdefinierten Token
-                //string userToken = $"{user.Username}-mtcgToken";
+                bool statsExist = GetSingleValue<int>(
+                    "SELECT COUNT(*) FROM userstats WHERE userid = @userid;",
+                    new Dictionary<string, object> { { "@userid", userId } }) > 0;
 
-                // SQL-Befehl zum Einfügen eines neuen Benutzers in die Datenbank
-                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins, token) VALUES (@username, @password, @coins, @token);", conn))
+                if (!statsExist)
                 {
-                    // Füge die Parameter für den SQL-Befehl hinzu
+                    using (NpgsqlCommand statsCmd = new NpgsqlCommand("INSERT INTO userstats (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
+                    {
+                        statsCmd.Parameters.AddWithValue("@userid", userId);
+                        statsCmd.ExecuteNonQuery();
+                    }
+                }
+
+                bool scoreboardExists = GetSingleValue<int>(
+                    "SELECT COUNT(*) FROM scoreboard WHERE userid = @userid;",
+                    new Dictionary<string, object> { { "@userid", userId } }) > 0;
+
+                if (!scoreboardExists)
+                {
+                    using (NpgsqlCommand scoreboardCmd = new NpgsqlCommand("INSERT INTO scoreboard (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
+                    {
+                        scoreboardCmd.Parameters.AddWithValue("@userid", userId);
+                        scoreboardCmd.ExecuteNonQuery();
+                    }
+                }
+
+                Console.WriteLine($"User {user.Username} registered successfully.");
+                return true;
+            }
+            catch (PostgresException ex)
+            {
+                Console.WriteLine($"Failed to register user {user.Username}: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected error occurred while registering user {user.Username}: {ex.Message}");
+            }
+
+            return false;
+        }
+        public bool GenerateAndStoreToken(Users user)
+        {
+            string token = Guid.NewGuid().ToString();
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand("UPDATE users SET token = @token WHERE username = @username", conn))
+                {
                     cmd.Parameters.AddWithValue("username", user.Username);
-                    cmd.Parameters.AddWithValue("password", hashedPassword);
-                    cmd.Parameters.AddWithValue("coins", 20);
-                    //cmd.Parameters.AddWithValue("token", userToken);
+                    cmd.Parameters.AddWithValue("token", token);
 
-                    // Führe den SQL-Befehl aus und speichere die Anzahl der betroffenen Zeilen
                     int rowsAffected = cmd.ExecuteNonQuery();
-
-                    // Wenn mindestens eine Zeile betroffen ist, gib true zurück, ansonsten false
                     return rowsAffected > 0;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error during user creation: {ex.Message}");
+                Console.WriteLine($"Error generating and storing token for user {user.Username}: {ex.Message}");
+                return false;
             }
-            return false;
         }
+
+        public int? GetUserIdFromToken(string token)
+        {
+            try
+            {
+                return GetSingleValue<int>(
+                    "SELECT userid FROM users WHERE token = @token",
+                    new Dictionary<string, object> { { "@token", token } }
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error retrieving UserId from token: {ex.Message}");
+                return null;
+            }
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //sessions 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public string? Logging(Users user)
+        {
+            if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
+            {
+                Console.WriteLine("Invalid user information.");
+                return null;
+            }
+
+            try
+            {
+                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password, token FROM users WHERE username = @username;", conn))
+                {
+                    cmd.Parameters.AddWithValue("username", user.Username);
+
+                    string? storedPasswordHash = null;
+                    string? token = null;
+
+                    using (NpgsqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            storedPasswordHash = reader.GetString(0); // Passwort-Hash
+                            token = reader.GetString(1); // Vorhandener Token
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(storedPasswordHash) && BCrypt.Net.BCrypt.Verify(user.Password, storedPasswordHash))
+                    {
+                        Console.WriteLine($"Login successful for user: {user.Username}");
+                        return token;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Login failed for user: {user.Username}");
+                        return null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during user login: {ex.Message}");
+                return null;
+            }
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //transactions 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public int GetUserCoins(string username)
+        {
+            string query = "SELECT coins FROM users WHERE username = @username;";
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+                return (int)cmd.ExecuteScalar();
+            }
+        }
+
 
         public Response GetUser(string username)
         {
@@ -262,266 +399,6 @@ namespace Trimmel_MCTG.db
             return response;
         }
 
-
-        public string? Logging(Users user)
-        {
-            if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
-            {
-                Console.WriteLine("Invalid user information.");
-                return null;
-            }
-
-            try
-            {
-                using (NpgsqlCommand cmd = new NpgsqlCommand("SELECT password, token FROM users WHERE username = @username;", conn))
-                {
-                    cmd.Parameters.AddWithValue("username", user.Username);
-
-                    string? storedPasswordHash = null;
-                    string? token = null;
-
-                    using (NpgsqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            storedPasswordHash = reader.GetString(0); // Passwort-Hash
-                            token = reader.GetString(1); // Vorhandener Token
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(storedPasswordHash) && BCrypt.Net.BCrypt.Verify(user.Password, storedPasswordHash))
-                    {
-                        // Benutzeranmeldung erfolgreich, gib den bestehenden Token zurück
-                        Console.WriteLine($"Login successful for user: {user.Username}");
-                        return token;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Login failed for user: {user.Username}");
-                        return null; // Passwort falsch oder Benutzer existiert nicht
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error during user login: {ex.Message}");
-                return null; // Fehlerbehandlung
-            }
-        }
-
-        public bool CheckAndRegister(Users user)
-        {
-            if (user == null || string.IsNullOrEmpty(user.Username) || string.IsNullOrEmpty(user.Password))
-            {
-                Console.WriteLine("Invalid user information.");
-                return false;
-            }
-
-            // Überprüfen, ob der Benutzer bereits in der Datenbank existiert
-            if (IsUserInDatabase(user))
-            {
-                Console.WriteLine($"User {user.Username} already exists.");
-                return false;
-            }
-
-            try
-            {
-                // Benutzer in der Tabelle `users` hinzufügen
-                using (NpgsqlCommand cmd = new NpgsqlCommand("INSERT INTO users (username, password, coins) VALUES (@username, @password, @coins);", conn))
-                {
-                    cmd.Parameters.AddWithValue("username", user.Username);
-                    string hashedPassword = BCrypt.Net.BCrypt.HashPassword(user.Password);
-                    cmd.Parameters.AddWithValue("password", hashedPassword);
-                    cmd.Parameters.AddWithValue("coins", user.Coins);
-
-                    cmd.ExecuteNonQuery();
-                }
-
-                // `userId` abrufen
-                int userId = GetSingleValue<int>("SELECT userid FROM users WHERE username = @username;",
-                    new Dictionary<string, object> { { "@username", user.Username } });
-
-                // Überprüfen, ob bereits ein Eintrag in `userstats` existiert
-                bool statsExist = GetSingleValue<int>(
-                    "SELECT COUNT(*) FROM userstats WHERE userid = @userid;",
-                    new Dictionary<string, object> { { "@userid", userId } }) > 0;
-
-                if (!statsExist)
-                {
-                    using (NpgsqlCommand statsCmd = new NpgsqlCommand("INSERT INTO userstats (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
-                    {
-                        statsCmd.Parameters.AddWithValue("@userid", userId);
-                        statsCmd.ExecuteNonQuery();
-                    }
-                }
-
-
-                // Überprüfen, ob bereits ein Eintrag in `scoreboard` existiert
-                bool scoreboardExists = GetSingleValue<int>(
-                    "SELECT COUNT(*) FROM scoreboard WHERE userid = @userid;",
-                    new Dictionary<string, object> { { "@userid", userId } }) > 0;
-
-                // Falls nicht vorhanden, Eintrag in `scoreboard` hinzufügen
-                if (!scoreboardExists)
-                {
-                    using (NpgsqlCommand scoreboardCmd = new NpgsqlCommand("INSERT INTO scoreboard (userid, wins, losses, elo) VALUES (@userid, 0, 0, 1000);", conn))
-                    {
-                        scoreboardCmd.Parameters.AddWithValue("@userid", userId);
-                        scoreboardCmd.ExecuteNonQuery();
-                    }
-                }
-
-                Console.WriteLine($"User {user.Username} registered successfully.");
-                return true;
-            }
-            catch (PostgresException ex)
-            {
-                Console.WriteLine($"Failed to register user {user.Username}: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Unexpected error occurred while registering user {user.Username}: {ex.Message}");
-            }
-
-            return false;
-        }
-
-
-
-
-        public bool GenerateAndStoreToken(Users user)
-        {
-            // Token Generieren - Randomly generate a secure token using Guid
-            string token = Guid.NewGuid().ToString();
-
-            try
-            {
-                using (var cmd = new NpgsqlCommand("UPDATE users SET token = @token WHERE username = @username", conn))
-                {
-                    cmd.Parameters.AddWithValue("username", user.Username);
-                    cmd.Parameters.AddWithValue("token", token);
-
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    return rowsAffected > 0;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error generating and storing token for user {user.Username}: {ex.Message}");
-                return false;
-            }
-        }
-
-        public int InsertPackage()
-        {
-            string query = "INSERT INTO packages (price) VALUES (5) RETURNING package_id;";
-            try
-            {
-                using (var cmd = new NpgsqlCommand(query, conn))
-                {
-                    return (int)cmd.ExecuteScalar();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error inserting package: {ex.Message}");
-                throw;
-            }
-        }
-
-        public void InsertCard(Cards card)
-        {
-            // Prüfen, ob die Karte schon existiert
-            string checkQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
-            using (var checkCmd = new NpgsqlCommand(checkQuery, conn))
-            {
-                checkCmd.Parameters.AddWithValue("cardId", card.CardId);
-                var count = (long)checkCmd.ExecuteScalar();
-                if (count > 0)
-                {
-                    // Statt Exception werfen -> einfach überspringen
-                    // Console.WriteLine($"[InsertCard] Card with ID {card.CardId} already exists. Skipping insert...");
-                    return;
-                }
-            }
-
-            // Karte noch nicht in DB -> jetzt einfügen
-            string query = @"
-                INSERT INTO cards (card_id, name, damage, element_type, card_type)
-                VALUES (@cardId, @name, @damage, @elementType, @cardType);";
-
-            using (var cmd = new NpgsqlCommand(query, conn))
-            {
-                cmd.Parameters.AddWithValue("cardId", card.CardId);
-                cmd.Parameters.AddWithValue("name", card.Name);
-                cmd.Parameters.AddWithValue("damage", card.Damage);
-                cmd.Parameters.AddWithValue("elementType", card.ElementType);
-                cmd.Parameters.AddWithValue("cardType", card.CardType);
-
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        public void InsertCardWithoutId(Cards card)
-        {
-            string query = @"
-                INSERT INTO cards (name, damage, element_type, card_type)
-                VALUES (@name, @damage, @elementType, @cardType);";
-
-            using (var cmd = new NpgsqlCommand(query, conn))
-            {
-                cmd.Parameters.AddWithValue("name", card.Name);
-                cmd.Parameters.AddWithValue("damage", card.Damage);
-                cmd.Parameters.AddWithValue("elementType", card.ElementType);
-                cmd.Parameters.AddWithValue("cardType", card.CardType);
-
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        public void LinkCardToPackage(int packageId, Guid cardId)
-        {
-            // 1) Prüfen, ob Karte existiert
-            string checkCardQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
-            using (var checkCmd = new NpgsqlCommand(checkCardQuery, conn))
-            {
-                checkCmd.Parameters.AddWithValue("cardId", cardId);
-                var count = (long)checkCmd.ExecuteScalar();
-                if (count == 0)
-                {
-                    Console.WriteLine($"Card with ID {cardId} does not exist in 'cards'.");
-                    return;
-                }
-            }
-
-            // 2) Prüfen, ob (package_id, card_id) schon in packageCards vorhanden
-            string checkPackageCardsQuery = "SELECT COUNT(*) FROM packageCards WHERE package_id = @packageId AND card_id = @cardId;";
-            using (var checkCmd = new NpgsqlCommand(checkPackageCardsQuery, conn))
-            {
-                checkCmd.Parameters.AddWithValue("packageId", packageId);
-                checkCmd.Parameters.AddWithValue("cardId", cardId);
-                var count = (long)checkCmd.ExecuteScalar();
-                if (count > 0)
-                {
-                    // Already linked -> optional: skip or error out
-                    Console.WriteLine($"(package_id, card_id) = ({packageId}, {cardId}) already exists. Skipping link...");
-                    return;
-                }
-            }
-
-            // 3) Verknüpfung einfügen
-            string query = @"
-                INSERT INTO packageCards (package_id, card_id)
-                VALUES (@packageId, @cardId);";
-
-            using (var cmd = new NpgsqlCommand(query, conn))
-            {
-                cmd.Parameters.AddWithValue("packageId", packageId);
-                cmd.Parameters.AddWithValue("cardId", cardId);
-                cmd.ExecuteNonQuery();
-            }
-        }
-
         public List<Cards> GetCardsByPackageId(int packageId)
         {
             string query = @"
@@ -555,322 +432,6 @@ namespace Trimmel_MCTG.db
                 }
             }
             return cards;
-        }
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        /// <summary>
-        /// Zieht eine zufällige Karte aus dem Restdeck eines Benutzers.
-        /// </summary>
-        /// <param name="userId">ID des Benutzers</param>
-        /// <returns>Gezogene Karte oder null, wenn das Deck leer ist</returns>
-        public Cards? DrawCard(int userId)
-        {
-            // Wähle eine zufällige Karte aus dem Restdeck (in_deck = TRUE)
-            string query = @"
-                SELECT card_id, name, damage, element_type, card_type
-                FROM user_stacks
-                WHERE userid = @userId AND in_deck = FALSE
-                ORDER BY RANDOM()
-                LIMIT 1;
-            ";
-
-            var parameters = new Dictionary<string, object>
-            {
-                { "@userId", userId }
-            };
-
-            var result = ExecuteQuery(query, parameters);
-            if (result.Count == 0)
-            {
-                // Kein Karten mehr im Restdeck
-                return null;
-            }
-
-            var row = result[0];
-            var drawnCard = new Cards(
-                Guid.Parse(row["card_id"].ToString()),
-                row["name"].ToString(),
-                double.Parse(row["damage"].ToString()),
-                row["element_type"].ToString(),
-                row["card_type"].ToString(),
-                inDeck: false // Da die Karte jetzt in der Hand ist
-            );
-
-            // Aktualisiere den Status der gezogenen Karte auf in_deck = FALSE
-            string updateQuery = @"
-                UPDATE user_stacks
-                SET in_deck = FALSE
-                WHERE userid = @userId AND card_id = @cardId;
-            ";
-
-            var updateParams = new Dictionary<string, object>
-            {
-                { "@userId", userId },
-                { "@cardId", drawnCard.CardId }
-            };
-
-            ExecuteNonQuery(updateQuery, updateParams);
-
-            return drawnCard;
-        }
-
-
-        /// <summary>
-        /// Ruft die Hand eines Benutzers basierend auf den Karten in der Decks-Tabelle ab.
-        /// </summary>
-        /// <param name="userId">ID des Benutzers</param>
-        /// <param name="handCardIds">Liste der Karten-IDs in der Hand</param>
-        /// <returns>Liste der Karten in der Hand</returns>
-        public List<Cards> GetUserHand(int userId, List<Guid> handCardIds)
-        {
-            if (handCardIds.Count == 0)
-                return new List<Cards>();
-
-            string query = @"
-                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
-                FROM user_stacks us
-                JOIN cards c ON us.card_id = c.card_id
-                WHERE us.userid = @userId
-                  AND us.card_id = ANY(@cardIds::uuid[]);
-
-            ";
-
-            var parameters = new Dictionary<string, object>
-            {
-                { "@userId", userId },
-                { "@cardIds", handCardIds.ToArray() }
-            };
-
-            var result = ExecuteQuery(query, parameters);
-            return result.Select(row => new Cards(
-                Guid.Parse(row["card_id"].ToString()),
-                row["name"].ToString(),
-                double.Parse(row["damage"].ToString()),
-                row["element_type"].ToString(),
-                row["card_type"].ToString(),
-                inDeck: true
-            )).ToList();
-        }
-
-        /// <summary>
-        /// Ruft das Restdeck eines Benutzers ab (Karten, die nicht in der Hand sind).
-        /// </summary>
-        /// <param name="userId">ID des Benutzers</param>
-        /// <param name="handCardIds">Liste der Karten-IDs in der Hand</param>
-        /// <returns>Liste der Karten im Restdeck</returns>
-        public List<Cards> GetUserDeckStack(int userId, List<Guid> handCardIds)
-        {
-            string query = @"
-                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
-                FROM user_stacks us
-                JOIN cards c ON us.card_id = c.card_id
-                WHERE us.userid = @userId 
-                  AND us.card_id = ANY(@cardIds::uuid[]);
-            ";
-
-
-            // Hier liegt der Fehler: Du nennst den Dictionary-Key "@handIds",
-            // aber das SQL nutzt "@cardIds"
-            var parameters = new Dictionary<string, object>
-            {
-                { "@userId", userId },
-                { "@cardIds", handCardIds.ToArray() }  // Passt jetzt zum SQL
-            };
-
-            var result = ExecuteQuery(query, parameters);
-            return result.Select(row => new Cards(
-                Guid.Parse(row["card_id"].ToString()),
-                row["name"].ToString(),
-                double.Parse(row["damage"].ToString()),
-                row["element_type"].ToString(),
-                row["card_type"].ToString(),
-                inDeck: false
-            )).ToList();
-        }
-
-        /// <summary>
-        /// Aktualisiert den Status einer Karte nach dem Ziehen oder Spielen.
-        /// </summary>
-        /// <param name="userId">ID des Benutzers</param>
-        /// <param name="cardId">ID der Karte</param>
-        /// <param name="inDeck">Neuer Status der Karte</param>
-        public bool UpdateCardStatus(int userId, Guid cardId, bool inDeck)
-        {
-            string query = @"
-                UPDATE user_stacks
-                SET in_deck = @inDeck
-                WHERE userid = @userId AND card_id = @cardId;
-            ";
-
-            var parameters = new Dictionary<string, object>
-            {
-                { "@inDeck", inDeck },
-                { "@userId", userId },
-                { "@cardId", cardId }
-            };
-
-            try
-            {
-                ExecuteNonQuery(query, parameters);
-                return true; // Erfolgreiches Update
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Datenbankfehler beim Aktualisieren des in_deck-Status: {ex.Message}");
-                return false; // Update fehlgeschlagen
-            }
-        }
-
-
-        /// <summary>
-        /// Ruft das Restdeck eines Benutzers ab, ohne die Karten in der Hand.
-        /// </summary>
-        /// <param name="userId">ID des Benutzers</param>
-        /// <returns>Liste der Karten im Restdeck</returns>
-        public List<Cards> GetAllDeckCards(int userId)
-        {
-            string query = @"
-                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
-                FROM user_stacks us
-                JOIN cards c ON us.card_id = c.card_id
-                WHERE us.userid = @userId AND us.in_deck = FALSE;
-            ";
-
-
-            var parameters = new Dictionary<string, object>
-            {
-                { "@userId", userId }
-            };
-
-            var result = ExecuteQuery(query, parameters);
-            return result.Select(row => new Cards(
-                Guid.Parse(row["card_id"].ToString()),
-                row["name"].ToString(),
-                double.Parse(row["damage"].ToString()),
-                row["element_type"].ToString(),
-                row["card_type"].ToString(),
-                inDeck: false
-            )).ToList();
-        }
-
-       
-
-
-        public void UpdateUserStats(int userId, bool won)
-        {
-            // Hole alte Stats aus userstats
-            string selectQuery = "SELECT wins, losses, elo FROM userstats WHERE userid = @userId;";
-            var selectParams = new Dictionary<string, object> { { "@userId", userId } };
-
-            using (var cmd = new NpgsqlCommand(selectQuery, conn))
-            {
-                foreach (var kvp in selectParams)
-                {
-                    cmd.Parameters.AddWithValue(kvp.Key, kvp.Value);
-                }
-                using (var reader = cmd.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        int wins = reader.GetInt32(0);
-                        int losses = reader.GetInt32(1);
-                        int elo = reader.GetInt32(2);
-
-                        if (won)
-                        {
-                            wins++;
-                            elo += 10;
-                        }
-                        else
-                        {
-                            losses++;
-                            elo -= 5;
-                        }
-
-                        // Update
-                        reader.Close();
-                        string updateQuery = "UPDATE userstats SET wins = @wins, losses = @losses, elo = @elo WHERE userid = @userId;";
-                        var updateParams = new Dictionary<string, object>
-                {
-                    { "@wins", wins },
-                    { "@losses", losses },
-                    { "@elo", elo },
-                    { "@userId", userId }
-                };
-                        ExecuteNonQuery(updateQuery, updateParams);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Userstats not found for userId {userId}");
-                    }
-                }
-            }
-        }
-
-        public void UpdateElo(int winnerId, int loserId)
-        {
-            // Einfaches Beispiel: Winner +10, Loser -10
-            // In der Praxis: Elo-Funktion
-            string selectQuery = "SELECT elo FROM userstats WHERE userid = @userId;";
-            int winnerElo = GetSingleValue<int>(selectQuery, new Dictionary<string, object> { { "@userId", winnerId } });
-            int loserElo = GetSingleValue<int>(selectQuery, new Dictionary<string, object> { { "@userId", loserId } });
-
-            winnerElo += 10;
-            loserElo -= 10;
-
-            string updateQuery = "UPDATE userstats SET elo = @elo WHERE userid = @userId;";
-            ExecuteNonQuery(updateQuery, new Dictionary<string, object> { { "@elo", winnerElo }, { "@userId", winnerId } });
-            ExecuteNonQuery(updateQuery, new Dictionary<string, object> { { "@elo", loserElo }, { "@userId", loserId } });
-        }
-
-        public void RemoveCardFromHand(int userId, Guid cardId)
-        {
-            // Setze die Karte zurück in den verfügbaren Bereich (z.B. aus der Hand entfernen)
-            string query = @"
-                UPDATE user_stacks
-                SET in_deck = TRUE
-                WHERE userid = @userId AND card_id = @cardId AND in_deck = FALSE;
-            ";
-
-            var parameters = new Dictionary<string, object>
-            {
-                { "@userId", userId },
-                { "@cardId", cardId }
-            };
-
-            ExecuteNonQuery(query, parameters);
-        }
-
-
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        public int GetUserCoins(string username)
-        {
-            string query = "SELECT coins FROM users WHERE username = @username;";
-            using (var cmd = new NpgsqlCommand(query, conn))
-            {
-                cmd.Parameters.AddWithValue("username", username);
-                return (int)cmd.ExecuteScalar();
-            }
-        }
-
-        public Package? GetNextAvailablePackage()
-        {
-            string query = "SELECT package_id, price FROM packages ORDER BY package_id LIMIT 1;";
-            using (var cmd = new NpgsqlCommand(query, conn))
-            {
-                using (var reader = cmd.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        int packageId = reader.GetInt32(0);
-                        int price = reader.GetInt32(1);
-                        return new Package(packageId, price); // Geben Sie die Parameter an
-                    }
-                }
-            }
-            return null;
         }
 
         public void AssignCardToUser(string username, Guid cardId)
@@ -907,117 +468,131 @@ namespace Trimmel_MCTG.db
             }
         }
 
-        public List<Cards> GetBest4Cards(string username)
+        public Package? GetNextAvailablePackage()
         {
-            string query = @"
-                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
-                FROM user_stacks us
-                JOIN cards c ON us.card_id = c.card_id
-                JOIN users u ON us.userid = u.userid
-                WHERE u.username = @username
-                ORDER BY c.damage DESC
-                LIMIT 4;";
-            var bestCards = new List<Cards>();
-
+            string query = "SELECT package_id, price FROM packages ORDER BY package_id LIMIT 1;";
             using (var cmd = new NpgsqlCommand(query, conn))
             {
-                cmd.Parameters.AddWithValue("username", username);
-
                 using (var reader = cmd.ExecuteReader())
                 {
-                    while (reader.Read())
+                    if (reader.Read())
                     {
-                        bestCards.Add(new Cards(
-                            reader.GetGuid(0),
-                            reader.GetString(1),
-                            reader.GetDouble(2),  // Falls Damage ein `double` ist
-                            reader.GetString(3),
-                            reader.GetString(4)
-                        ));
+                        int packageId = reader.GetInt32(0);
+                        int price = reader.GetInt32(1);
+                        return new Package(packageId, price); // Geben Sie die Parameter an
                     }
                 }
             }
-            return bestCards;
+            return null;
         }
 
-        public void InsertIntoDeck(Guid card1Id, Guid card2Id, Guid card3Id, Guid card4Id, string username)
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //packages 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public int InsertPackage()
         {
-            try
-            {
-                // 1. Holen Sie die User-ID
-                string userIdQuery = "SELECT userid FROM users WHERE username = @username;";
-                int userId = GetSingleValue<int>(userIdQuery, new Dictionary<string, object> { { "@username", username } });
-
-                if (userId == 0)
-                {
-                    throw new Exception("User not found.");
-                }
-
-                // 2. Lösche das bestehende Deck für den Benutzer
-                string deleteDeckQuery = "DELETE FROM decks WHERE userid = @userId;";
-                ExecuteNonQuery(deleteDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
-
-                // 3. Füge das neue Deck ein
-                string insertDeckQuery = @"
-                        INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
-                        VALUES (@userId, @card1Id, @card2Id, @card3Id, @card4Id);";
-                ExecuteNonQuery(insertDeckQuery, new Dictionary<string, object>
-                    {
-                        { "@userId", userId },
-                        { "@card1Id", card1Id },
-                        { "@card2Id", card2Id },
-                        { "@card3Id", card3Id },
-                        { "@card4Id", card4Id }
-                    });
-
-                // 4. Setze den Status `in_deck` in `user_stacks`
-                // Setze alle Karten von diesem Benutzer auf FALSE
-                string resetInDeckQuery = "UPDATE user_stacks SET in_deck = FALSE WHERE userid = @userId;";
-                ExecuteNonQuery(resetInDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
-
-                // Setze die ausgewählten Karten auf TRUE
-                string updateInDeckQuery = @"
-                        UPDATE user_stacks
-                        SET in_deck = TRUE
-                        WHERE userid = @userId AND card_id IN (@card1Id, @card2Id, @card3Id, @card4Id);";
-                ExecuteNonQuery(updateInDeckQuery, new Dictionary<string, object>
-                    {
-                        { "@userId", userId },
-                        { "@card1Id", card1Id },
-                        { "@card2Id", card2Id },
-                        { "@card3Id", card3Id },
-                        { "@card4Id", card4Id }
-                    });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error inserting deck: {ex.Message}");
-                throw;
-            }
-        }
-
-        public void DeleteDeckByUser(string username)
-        {
-            string query = @"
-                DELETE FROM decks
-                WHERE userid = (SELECT userid FROM users WHERE username = @username);";
-
+            string query = "INSERT INTO packages (price) VALUES (5) RETURNING package_id;";
             try
             {
                 using (var cmd = new NpgsqlCommand(query, conn))
                 {
-                    cmd.Parameters.AddWithValue("username", username);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    Console.WriteLine($"{rowsAffected} deck(s) deleted for user {username}.");
+                    return (int)cmd.ExecuteScalar();
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error deleting deck for user {username}: {ex.Message}");
+                Console.WriteLine($"Error inserting package: {ex.Message}");
                 throw;
             }
         }
 
+        public void InsertCard(Cards card)
+        {
+            string checkQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
+            using (var checkCmd = new NpgsqlCommand(checkQuery, conn))
+            {
+                checkCmd.Parameters.AddWithValue("cardId", card.CardId);
+                var count = (long)checkCmd.ExecuteScalar();
+                if (count > 0)
+                {
+                    return;
+                }
+            }
+
+            string query = @"
+                INSERT INTO cards (card_id, name, damage, element_type, card_type)
+                VALUES (@cardId, @name, @damage, @elementType, @cardType);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("cardId", card.CardId);
+                cmd.Parameters.AddWithValue("name", card.Name);
+                cmd.Parameters.AddWithValue("damage", card.Damage);
+                cmd.Parameters.AddWithValue("elementType", card.ElementType);
+                cmd.Parameters.AddWithValue("cardType", card.CardType);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+        public void InsertCardWithoutId(Cards card)
+        {
+            string query = @"
+                INSERT INTO cards (name, damage, element_type, card_type)
+                VALUES (@name, @damage, @elementType, @cardType);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("name", card.Name);
+                cmd.Parameters.AddWithValue("damage", card.Damage);
+                cmd.Parameters.AddWithValue("elementType", card.ElementType);
+                cmd.Parameters.AddWithValue("cardType", card.CardType);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void LinkCardToPackage(int packageId, Guid cardId)
+        {
+            string checkCardQuery = "SELECT COUNT(*) FROM cards WHERE card_id = @cardId;";
+            using (var checkCmd = new NpgsqlCommand(checkCardQuery, conn))
+            {
+                checkCmd.Parameters.AddWithValue("cardId", cardId);
+                var count = (long)checkCmd.ExecuteScalar();
+                if (count == 0)
+                {
+                    Console.WriteLine($"Card with ID {cardId} does not exist in 'cards'.");
+                    return;
+                }
+            }
+
+            string checkPackageCardsQuery = "SELECT COUNT(*) FROM packageCards WHERE package_id = @packageId AND card_id = @cardId;";
+            using (var checkCmd = new NpgsqlCommand(checkPackageCardsQuery, conn))
+            {
+                checkCmd.Parameters.AddWithValue("packageId", packageId);
+                checkCmd.Parameters.AddWithValue("cardId", cardId);
+                var count = (long)checkCmd.ExecuteScalar();
+                if (count > 0)
+                {
+                    return;
+                }
+            }
+
+            string query = @"
+                INSERT INTO packageCards (package_id, card_id)
+                VALUES (@packageId, @cardId);";
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("packageId", packageId);
+                cmd.Parameters.AddWithValue("cardId", cardId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //cards 
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         public List<Cards> GetCardsByUsername(string username)
@@ -1052,7 +627,113 @@ namespace Trimmel_MCTG.db
             return cards;
         }
 
+        public List<Cards> GetBest4Cards(string username)
+        {
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM user_stacks us
+                JOIN cards c ON us.card_id = c.card_id
+                JOIN users u ON us.userid = u.userid
+                WHERE u.username = @username
+                ORDER BY c.damage DESC
+                LIMIT 4;";
+            var bestCards = new List<Cards>();
+
+            using (var cmd = new NpgsqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("username", username);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        bestCards.Add(new Cards(
+                            reader.GetGuid(0),
+                            reader.GetString(1),
+                            reader.GetDouble(2),  // Falls Damage ein `double` ist
+                            reader.GetString(3),
+                            reader.GetString(4)
+                        ));
+                    }
+                }
+            }
+            return bestCards;
+        }
+
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //deck 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public void ConfigureDeck(string username, List<string> cardIds)
+        {
+            using (var connection = new NpgsqlConnection(connectionString))
+            {
+                connection.Open();
+
+                var validateCardsCommand = new NpgsqlCommand(@"
+                    SELECT c.card_id, c.card_type
+                    FROM user_stacks us
+                    JOIN cards c ON us.card_id = c.card_id
+                    WHERE us.userid = (SELECT userid FROM users WHERE username = @username)
+                      AND c.card_id = ANY(@cardIds::uuid[]);", connection);
+
+                validateCardsCommand.Parameters.AddWithValue("username", username);
+                validateCardsCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
+
+                var cardTypes = new Dictionary<string, int> { { "monster", 0 }, { "spell", 0 } };
+
+                using (var reader = validateCardsCommand.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        var cardId = reader["card_id"].ToString();
+                        var cardType = reader["card_type"].ToString();
+
+
+                        if (cardTypes.ContainsKey(cardType))
+                        {
+                            cardTypes[cardType]++;
+                        }
+                    }
+                }
+
+                if (cardTypes["monster"] != 2 || cardTypes["spell"] != 2)
+                {
+                    throw new Exception("You must configure exactly 2 monsters and 2 spells in your deck.");
+                }
+
+
+                var deleteDeckCommand = new NpgsqlCommand(@"
+                    DELETE FROM decks
+                    WHERE userid = (SELECT userid FROM users WHERE username = @username);", connection);
+                deleteDeckCommand.Parameters.AddWithValue("username", username);
+                deleteDeckCommand.ExecuteNonQuery();
+
+                var insertDeckCommand = new NpgsqlCommand(@"
+                    INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
+                    VALUES (
+                        (SELECT userid FROM users WHERE username = @username),
+                        @card1::uuid, @card2::uuid, @card3::uuid, @card4::uuid);", connection);
+
+                insertDeckCommand.Parameters.AddWithValue("username", username);
+                insertDeckCommand.Parameters.AddWithValue("card1", Guid.Parse(cardIds[0]));
+                insertDeckCommand.Parameters.AddWithValue("card2", Guid.Parse(cardIds[1]));
+                insertDeckCommand.Parameters.AddWithValue("card3", Guid.Parse(cardIds[2]));
+                insertDeckCommand.Parameters.AddWithValue("card4", Guid.Parse(cardIds[3]));
+                insertDeckCommand.ExecuteNonQuery();
+
+                var updateCardsCommand = new NpgsqlCommand(@"
+                    UPDATE user_stacks
+                    SET in_deck = TRUE
+                    WHERE userid = (SELECT userid FROM users WHERE username = @username)
+                      AND card_id = ANY(@cardIds::uuid[]);", connection);
+                updateCardsCommand.Parameters.AddWithValue("username", username);
+                updateCardsCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
+                updateCardsCommand.ExecuteNonQuery();
+
+                Console.WriteLine("Deck configured successfully.");
+            }
+        }
 
         public List<Cards> ShowUnconfiguredDeck(string username)
         {
@@ -1073,115 +754,451 @@ namespace Trimmel_MCTG.db
                 .ToList();
         }
 
-
-        public void ConfigureDeck(string username, List<string> cardIds)
+        public List<Cards> GetConfiguredDeck(string username)
         {
-            using (var connection = new NpgsqlConnection(connectionString))
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM decks d
+                JOIN users u ON u.userid = d.userid
+                JOIN cards c ON c.card_id = ANY (ARRAY[d.card_1_id, d.card_2_id, d.card_3_id, d.card_4_id])
+                WHERE u.username = @username;
+            ";
+
+            var parameters = new Dictionary<string, object>
             {
-                connection.Open();
+                { "@username", username }
+            };
 
-                // Kartentypen validieren
-                var validateCardsCommand = new NpgsqlCommand(@"
-                    SELECT c.card_id, c.card_type
-                    FROM user_stacks us
-                    JOIN cards c ON us.card_id = c.card_id
-                    WHERE us.userid = (SELECT userid FROM users WHERE username = @username)
-                      AND c.card_id = ANY(@cardIds::uuid[]);", connection);
+            var result = ExecuteQuery(query, parameters);
 
-                validateCardsCommand.Parameters.AddWithValue("username", username);
-                validateCardsCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
+            if (result.Count == 0)
+            {
+                // Kein Deck gefunden
+                return new List<Cards>();
+            }
 
-                var cardTypes = new Dictionary<string, int> { { "monster", 0 }, { "spell", 0 } };
+            return result.Select(row => new Cards(
+                Guid.Parse(row["card_id"].ToString()),
+                row["name"].ToString(),
+                double.Parse(row["damage"].ToString()),
+                row["element_type"].ToString(),
+                row["card_type"].ToString()
+            )).ToList();
+        }
 
-                using (var reader = validateCardsCommand.ExecuteReader())
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //scoreboard 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public static List<Scoreboard> GetAll(Database db)
+        {
+            var results = db.ExecuteQuery("SELECT * FROM scoreboard ORDER BY elo DESC", new Dictionary<string, object>());
+            var scoreboards = new List<Scoreboard>();
+
+            foreach (var row in results)
+            {
+                scoreboards.Add(new Scoreboard
                 {
-                    while (reader.Read())
+                    Id = Convert.ToInt32(row["id"]),
+                    UserId = Convert.ToInt32(row["userid"]),
+                    Wins = Convert.ToInt32(row["wins"]),
+                    Losses = Convert.ToInt32(row["losses"]),
+                    Elo = Convert.ToInt32(row["elo"]),
+                    CreatedAt = Convert.ToDateTime(row["created_at"]),
+                    UpdatedAt = Convert.ToDateTime(row["updated_at"])
+                });
+            }
+
+            return scoreboards;
+        }
+
+        public static void CreateEntry(Database db, int userId)
+        {
+            var parameters = new Dictionary<string, object>
+            {
+                { "@userid", userId },
+                { "@wins", 0 },
+                { "@losses", 0 },
+                { "@elo", 1000 },
+                { "@created_at", DateTime.UtcNow },
+                { "@updated_at", DateTime.UtcNow }
+            };
+
+            db.ExecuteNonQuery(
+                "INSERT INTO scoreboard (userid, wins, losses, elo, created_at, updated_at) VALUES (@userid, @wins, @losses, @elo, @created_at, @updated_at)",
+                parameters
+            );
+        }
+
+        public static Scoreboard LoadByUserId(Database db, int userId)
+        {
+            var parameters = new Dictionary<string, object> { { "@userid", userId } };
+            var results = db.ExecuteQuery("SELECT * FROM scoreboard WHERE userid = @userid", parameters);
+
+            if (results.Count == 0)
+            {
+                throw new KeyNotFoundException($"Scoreboard entry for userId {userId} not found.");
+            }
+
+            var row = results[0];
+            return new Scoreboard
+            {
+                Id = Convert.ToInt32(row["id"]),
+                UserId = Convert.ToInt32(row["userid"]),
+                Wins = Convert.ToInt32(row["wins"]),
+                Losses = Convert.ToInt32(row["losses"]),
+                Elo = Convert.ToInt32(row["elo"]),
+                CreatedAt = Convert.ToDateTime(row["created_at"]),
+                UpdatedAt = Convert.ToDateTime(row["updated_at"])
+            };
+        }
+
+        public void UpdateScoreboard(string winnerUsername, string loserUsername)
+        {
+            var queryWinner = @"
+                INSERT INTO scoreboard (userid, wins, losses, elo) 
+                VALUES ((SELECT userid FROM users WHERE username = @winner), 1, 0, 10)
+                ON CONFLICT (userid) 
+                DO UPDATE SET wins = scoreboard.wins + 1, elo = scoreboard.elo + 10, updated_at = CURRENT_TIMESTAMP;";
+
+            var queryLoser = @"
+                INSERT INTO scoreboard (userid, wins, losses, elo) 
+                VALUES ((SELECT userid FROM users WHERE username = @loser), 0, 1, -10)
+                ON CONFLICT (userid) 
+                DO UPDATE SET losses = scoreboard.losses + 1, elo = scoreboard.elo - 10, updated_at = CURRENT_TIMESTAMP;";
+
+            ExecuteNonQuery(queryWinner, new Dictionary<string, object> { { "@winner", winnerUsername } });
+            ExecuteNonQuery(queryLoser, new Dictionary<string, object> { { "@loser", loserUsername } });
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //stats 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public UserData? GetUserData(string username)
+        {
+            var query = @"SELECT userid, name, bio, image 
+                  FROM users 
+                  WHERE username = @username;";
+            var parameters = new Dictionary<string, object> { { "@username", username } };
+
+
+            var result = ExecuteQuery(query, parameters).FirstOrDefault();
+            if (result == null)
+            {
+                return null;
+            }
+
+            return new UserData
+            {
+                UserId = Convert.ToInt32(result["userid"]),
+                Name = result["name"].ToString(),
+                Bio = result["bio"].ToString(),
+                Image = result["image"].ToString()
+            };
+        }
+
+        public void UpdateUserData(Database db, string currentUsername, string newName, string bio, string image)
+        {
+            if (!string.IsNullOrEmpty(newName) && newName != currentUsername)
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "@newUsername", newName }
+                };
+
+                var existingUserCheck = db.ExecuteQuery("SELECT username FROM Users WHERE username = @newUsername", parameters);
+                if (existingUserCheck.Count > 0)
+                {
+                    throw new Exception($"The username '{newName}' is already taken.");
+                }
+            }
+
+            var updateParams = new Dictionary<string, object>
+            {
+                { "@bio", bio ?? string.Empty },
+                { "@image", image ?? string.Empty },
+                { "@currentUsername", currentUsername }
+            };
+
+            string updateQuery = "UPDATE Users SET Bio = @bio, Image = @image WHERE Username = @currentUsername";
+
+            if (!string.IsNullOrEmpty(newName) && newName != currentUsername)
+            {
+                updateQuery = "UPDATE Users SET Bio = @bio, Image = @image, Username = @newUsername WHERE Username = @currentUsername";
+                updateParams["@newUsername"] = newName;
+            }
+
+            db.ExecuteNonQuery(updateQuery, updateParams);
+        }
+
+        public void UpdateUser(Database db, string username, string newName, string bio, string image)
+        {
+            if (!string.IsNullOrEmpty(newName))
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "@NewName", newName }
+                };
+                var result = db.ExecuteQuery("SELECT username FROM Users WHERE username = @NewName", parameters);
+
+                if (result.Count > 0)
+                {
+                    throw new Exception("Username already exists.");
+                }
+            }
+
+            var updateParams = new Dictionary<string, object>
+            {
+                { "@Bio", bio ?? string.Empty },
+                { "@Image", image ?? string.Empty },
+                { "@Username", username }
+            };
+            string query = "UPDATE Users SET Bio = @Bio, Image = @Image WHERE Username = @Username";
+
+            if (!string.IsNullOrEmpty(newName))
+            {
+                query = "UPDATE Users SET Bio = @Bio, Image = @Image, Username = @NewName WHERE Username = @Username";
+                updateParams["@NewName"] = newName;
+            }
+
+            db.ExecuteNonQuery(query, updateParams);
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //battle 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        public List<Cards> GetAllDeckCards(int userId)
+        {
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM user_stacks us
+                JOIN cards c ON us.card_id = c.card_id
+                WHERE us.userid = @userId AND us.in_deck = FALSE;
+            ";
+
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@userId", userId }
+            };
+
+            var result = ExecuteQuery(query, parameters);
+            return result.Select(row => new Cards(
+                Guid.Parse(row["card_id"].ToString()),
+                row["name"].ToString(),
+                double.Parse(row["damage"].ToString()),
+                row["element_type"].ToString(),
+                row["card_type"].ToString(),
+                inDeck: false
+            )).ToList();
+        }
+
+        public void UpdateUserStats(int userId, bool won)
+        {
+            string selectQuery = "SELECT wins, losses, elo FROM userstats WHERE userid = @userId;";
+            var selectParams = new Dictionary<string, object> { { "@userId", userId } };
+
+            using (var cmd = new NpgsqlCommand(selectQuery, conn))
+            {
+                foreach (var kvp in selectParams)
+                {
+                    cmd.Parameters.AddWithValue(kvp.Key, kvp.Value);
+                }
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
                     {
-                        var cardId = reader["card_id"].ToString();
-                        var cardType = reader["card_type"].ToString();
+                        int wins = reader.GetInt32(0);
+                        int losses = reader.GetInt32(1);
+                        int elo = reader.GetInt32(2);
 
-                        // Console.WriteLine($"Card ID: {cardId}, Type: {cardType}");
-
-                        if (cardTypes.ContainsKey(cardType))
+                        if (won)
                         {
-                            cardTypes[cardType]++;
+                            wins++;
+                            elo += 10;
                         }
+                        else
+                        {
+                            losses++;
+                            elo -= 5;
+                        }
+
+                        reader.Close();
+                        string updateQuery = "UPDATE userstats SET wins = @wins, losses = @losses, elo = @elo WHERE userid = @userId;";
+                        var updateParams = new Dictionary<string, object>
+                {
+                    { "@wins", wins },
+                    { "@losses", losses },
+                    { "@elo", elo },
+                    { "@userId", userId }
+                };
+                        ExecuteNonQuery(updateQuery, updateParams);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Userstats not found for userId {userId}");
                     }
                 }
-
-                //Console.WriteLine($"Card type counts: Monsters = {cardTypes["monster"]}, Spells = {cardTypes["spell"]}");
-
-                // Einschränkungen prüfen
-                if (cardTypes["monster"] != 2 || cardTypes["spell"] != 2)
-                {
-                    throw new Exception("You must configure exactly 2 monsters and 2 spells in your deck.");
-                }
-
-                // Bestehendes Deck löschen
-                var deleteDeckCommand = new NpgsqlCommand(@"
-                    DELETE FROM decks
-                    WHERE userid = (SELECT userid FROM users WHERE username = @username);", connection);
-                deleteDeckCommand.Parameters.AddWithValue("username", username);
-                deleteDeckCommand.ExecuteNonQuery();
-
-                // Neues Deck einfügen
-                var insertDeckCommand = new NpgsqlCommand(@"
-                    INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
-                    VALUES (
-                        (SELECT userid FROM users WHERE username = @username),
-                        @card1::uuid, @card2::uuid, @card3::uuid, @card4::uuid);", connection);
-
-                insertDeckCommand.Parameters.AddWithValue("username", username);
-                insertDeckCommand.Parameters.AddWithValue("card1", Guid.Parse(cardIds[0]));
-                insertDeckCommand.Parameters.AddWithValue("card2", Guid.Parse(cardIds[1]));
-                insertDeckCommand.Parameters.AddWithValue("card3", Guid.Parse(cardIds[2]));
-                insertDeckCommand.Parameters.AddWithValue("card4", Guid.Parse(cardIds[3]));
-                insertDeckCommand.ExecuteNonQuery();
-
-                // Kartenstatus aktualisieren
-                var updateCardsCommand = new NpgsqlCommand(@"
-                    UPDATE user_stacks
-                    SET in_deck = TRUE
-                    WHERE userid = (SELECT userid FROM users WHERE username = @username)
-                      AND card_id = ANY(@cardIds::uuid[]);", connection);
-                updateCardsCommand.Parameters.AddWithValue("username", username);
-                updateCardsCommand.Parameters.AddWithValue("cardIds", cardIds.ToArray());
-                updateCardsCommand.ExecuteNonQuery();
-
-                Console.WriteLine("Deck configured successfully.");
             }
         }
 
-
-
-
-
-        // Zusätzliche Hilfsmethode zum Abrufen der Benutzerkarten
-        private List<UserCard> GetUserCards(int userId, List<string> cardIds)
+        public void UpdateElo(int winnerId, int loserId)
         {
+            string selectQuery = "SELECT elo FROM userstats WHERE userid = @userId;";
+            int winnerElo = GetSingleValue<int>(selectQuery, new Dictionary<string, object> { { "@userId", winnerId } });
+            int loserElo = GetSingleValue<int>(selectQuery, new Dictionary<string, object> { { "@userId", loserId } });
+
+            winnerElo += 10;
+            loserElo -= 10;
+
+            string updateQuery = "UPDATE userstats SET elo = @elo WHERE userid = @userId;";
+            ExecuteNonQuery(updateQuery, new Dictionary<string, object> { { "@elo", winnerElo }, { "@userId", winnerId } });
+            ExecuteNonQuery(updateQuery, new Dictionary<string, object> { { "@elo", loserElo }, { "@userId", loserId } });
+        }
+
+        public void RemoveCardFromHand(int userId, Guid cardId)
+        {  
             string query = @"
-                SELECT card_id, in_deck 
-                FROM user_stacks 
-                WHERE userid = @userId AND card_id = ANY(@cardIds::uuid[]);";
+                UPDATE user_stacks
+                SET in_deck = TRUE
+                WHERE userid = @userId AND card_id = @cardId AND in_deck = FALSE;
+            ";
 
             var parameters = new Dictionary<string, object>
             {
                 { "@userId", userId },
-                { "@cardIds", cardIds.Select(Guid.Parse).ToArray() }
+                { "@cardId", cardId }
+            };
+
+            ExecuteNonQuery(query, parameters);
+        }
+
+        
+        public Cards? DrawCard(int userId)
+        {
+            string query = @"
+                SELECT card_id, name, damage, element_type, card_type
+                FROM user_stacks
+                WHERE userid = @userId AND in_deck = FALSE
+                ORDER BY RANDOM()
+                LIMIT 1;
+            ";
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@userId", userId }
             };
 
             var result = ExecuteQuery(query, parameters);
-            return result.Select(row => new UserCard
+            if (result.Count == 0)
             {
-                CardId = Guid.Parse(row["card_id"].ToString()),
-                InDeck = Convert.ToBoolean(row["in_deck"])
-            }).ToList();
+                return null;
+            }
+
+            var row = result[0];
+            var drawnCard = new Cards(
+                Guid.Parse(row["card_id"].ToString()),
+                row["name"].ToString(),
+                double.Parse(row["damage"].ToString()),
+                row["element_type"].ToString(),
+                row["card_type"].ToString(),
+                inDeck: false 
+            );
+
+            string updateQuery = @"
+                UPDATE user_stacks
+                SET in_deck = FALSE
+                WHERE userid = @userId AND card_id = @cardId;
+            ";
+
+            var updateParams = new Dictionary<string, object>
+            {
+                { "@userId", userId },
+                { "@cardId", drawnCard.CardId }
+            };
+
+            ExecuteNonQuery(updateQuery, updateParams);
+
+            return drawnCard;
         }
 
-        public class UserCard
+        public void UpdateBattleEnd(int battleId, int winnerId, string logs)
         {
-            public Guid CardId { get; set; }
-            public bool InDeck { get; set; }
+            string query = @"
+                UPDATE battles
+                SET winnerid = @winnerId,
+                    end_time = CURRENT_TIMESTAMP,
+                    logs = @logs
+                WHERE battle_id = @battleId;
+            ";
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("winnerId", winnerId);
+                    cmd.Parameters.AddWithValue("logs", logs);
+                    cmd.Parameters.AddWithValue("battleId", battleId);
+
+                    int rowsAffected = cmd.ExecuteNonQuery();
+                    if (rowsAffected == 0)
+                    {
+                        Console.WriteLine($"No battle found with battle_id = {battleId}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating battle end: {ex.Message}");
+                throw;
+            }
+        }
+
+        public int InsertBattle(int user1Id, int user2Id)
+        {
+            string query = @"
+                INSERT INTO battles (user1id, user2id)
+                VALUES (@user1Id, @user2Id)
+                RETURNING battle_id;
+            ";
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("user1Id", user1Id);
+                    cmd.Parameters.AddWithValue("user2Id", user2Id);
+
+                    // ExecuteScalar gibt das erste Feld der ersten Zeile zurück
+                    var result = cmd.ExecuteScalar();
+                    return result != null ? Convert.ToInt32(result) : -1;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inserting battle: {ex.Message}");
+                throw;
+            }
+        }
+
+        public void TransferCard(Guid cardId, int loserId, int winnerId)
+        {
+            string query = @"
+                UPDATE user_stacks
+                SET userid = @winnerId, in_deck = FALSE
+                WHERE userid = @loserId AND card_id = @cardId;
+            ";
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@winnerId", winnerId },
+                { "@loserId", loserId },
+                { "@cardId", cardId }
+            };
+
+            ExecuteNonQuery(query, parameters);
         }
 
         public void AddCardToDeck(int userId, Guid cardId)
@@ -1246,6 +1263,46 @@ namespace Trimmel_MCTG.db
                 )).ToList();
         }
 
+        public void UpdateDeck(int userId, string cardId1, string cardId2, string cardId3, string cardId4)
+        {
+            var deleteQuery = "DELETE FROM deck WHERE userid = @userId";
+            var deleteParams = new Dictionary<string, object> { { "@userId", userId } };
+            ExecuteNonQuery(deleteQuery, deleteParams);
+
+            var insertQuery = "INSERT INTO deck (userid, cardid) VALUES (@userId, @cardId)";
+            var insertParams = new Dictionary<string, object> { { "@userId", userId }, { "@cardId", "" } };
+
+            foreach (var cardId in new List<string> { cardId1, cardId2, cardId3, cardId4 })
+            {
+                insertParams["@cardId"] = cardId;
+                ExecuteNonQuery(insertQuery, new Dictionary<string, object> { { "@userId", userId }, { "@cardId", cardId } });
+            }
+        }
+
+        private List<UserCard> GetUserCards(int userId, List<string> cardIds)
+        {
+            string query = @"
+                SELECT card_id, in_deck 
+                FROM user_stacks 
+                WHERE userid = @userId AND card_id = ANY(@cardIds::uuid[]);";
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@userId", userId },
+                { "@cardIds", cardIds.Select(Guid.Parse).ToArray() }
+            };
+
+            var result = ExecuteQuery(query, parameters);
+            return result.Select(row => new UserCard
+            {
+                CardId = Guid.Parse(row["card_id"].ToString()),
+                InDeck = Convert.ToBoolean(row["in_deck"])
+            }).ToList();
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //trading 
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         public bool DoesUserOwnCard(string username, Guid cardId)
         {
@@ -1265,74 +1322,166 @@ namespace Trimmel_MCTG.db
             return GetSingleValue<int>(query, parameters) > 0;
         }
 
-        public void UpdateDeck(int userId, string cardId1, string cardId2, string cardId3, string cardId4)
+        public List<Cards> GetUserHand(int userId, List<Guid> handCardIds)
         {
-            // Zuerst das bestehende Deck löschen
-            var deleteQuery = "DELETE FROM deck WHERE userid = @userId";
-            var deleteParams = new Dictionary<string, object> { { "@userId", userId } };
-            ExecuteNonQuery(deleteQuery, deleteParams);
+            if (handCardIds.Count == 0)
+                return new List<Cards>();
 
-            // Dann die neuen Karten hinzufügen
-            var insertQuery = "INSERT INTO deck (userid, cardid) VALUES (@userId, @cardId)";
-            var insertParams = new Dictionary<string, object> { { "@userId", userId }, { "@cardId", "" } };
-
-            foreach (var cardId in new List<string> { cardId1, cardId2, cardId3, cardId4 })
-            {
-                insertParams["@cardId"] = cardId;
-                ExecuteNonQuery(insertQuery, new Dictionary<string, object> { { "@userId", userId }, { "@cardId", cardId } });
-            }
-        }
-
-        public void TransferCard(Guid cardId, int loserId, int winnerId)
-        {
-            string query = @"
-                UPDATE user_stacks
-                SET userid = @winnerId, in_deck = FALSE
-                WHERE userid = @loserId AND card_id = @cardId;
-            ";
-
-            var parameters = new Dictionary<string, object>
-            {
-                { "@winnerId", winnerId },
-                { "@loserId", loserId },
-                { "@cardId", cardId }
-            };
-
-            ExecuteNonQuery(query, parameters);
-        }
-
-        public List<Cards> GetConfiguredDeck(string username)
-        {
             string query = @"
                 SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
-                FROM decks d
-                JOIN users u ON u.userid = d.userid
-                JOIN cards c ON c.card_id = ANY (ARRAY[d.card_1_id, d.card_2_id, d.card_3_id, d.card_4_id])
-                WHERE u.username = @username;
+                FROM user_stacks us
+                JOIN cards c ON us.card_id = c.card_id
+                WHERE us.userid = @userId
+                  AND us.card_id = ANY(@cardIds::uuid[]);
+
             ";
 
             var parameters = new Dictionary<string, object>
             {
-                { "@username", username }
+                { "@userId", userId },
+                { "@cardIds", handCardIds.ToArray() }
             };
 
             var result = ExecuteQuery(query, parameters);
-
-            if (result.Count == 0)
-            {
-                // Kein Deck gefunden
-                return new List<Cards>();
-            }
-
             return result.Select(row => new Cards(
                 Guid.Parse(row["card_id"].ToString()),
                 row["name"].ToString(),
                 double.Parse(row["damage"].ToString()),
                 row["element_type"].ToString(),
-                row["card_type"].ToString()
+                row["card_type"].ToString(),
+                inDeck: true
             )).ToList();
         }
 
+
+        public List<Cards> GetUserDeckStack(int userId, List<Guid> handCardIds)
+        {
+            string query = @"
+                SELECT c.card_id, c.name, c.damage, c.element_type, c.card_type
+                FROM user_stacks us
+                JOIN cards c ON us.card_id = c.card_id
+                WHERE us.userid = @userId 
+                  AND us.card_id = ANY(@cardIds::uuid[]);";
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@userId", userId },
+                { "@cardIds", handCardIds.ToArray() }  // Passt jetzt zum SQL
+            };
+
+            var result = ExecuteQuery(query, parameters);
+            return result.Select(row => new Cards(
+                Guid.Parse(row["card_id"].ToString()),
+                row["name"].ToString(),
+                double.Parse(row["damage"].ToString()),
+                row["element_type"].ToString(),
+                row["card_type"].ToString(),
+                inDeck: false
+            )).ToList();
+        }
+
+        public bool UpdateCardStatus(int userId, Guid cardId, bool inDeck)
+        {
+            string query = @"
+                UPDATE user_stacks
+                SET in_deck = @inDeck
+                WHERE userid = @userId AND card_id = @cardId;
+            ";
+
+            var parameters = new Dictionary<string, object>
+            {
+                { "@inDeck", inDeck },
+                { "@userId", userId },
+                { "@cardId", cardId }
+            };
+
+            try
+            {
+                ExecuteNonQuery(query, parameters);
+                return true; 
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Datenbankfehler beim Aktualisieren des in_deck-Status: {ex.Message}");
+                return false; 
+            }
+        }
+  
+
+        public void InsertIntoDeck(Guid card1Id, Guid card2Id, Guid card3Id, Guid card4Id, string username)
+        {
+            try
+            {
+                string userIdQuery = "SELECT userid FROM users WHERE username = @username;";
+                int userId = GetSingleValue<int>(userIdQuery, new Dictionary<string, object> { { "@username", username } });
+
+                if (userId == 0)
+                {
+                    throw new Exception("User not found.");
+                }
+
+                string deleteDeckQuery = "DELETE FROM decks WHERE userid = @userId;";
+                ExecuteNonQuery(deleteDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
+
+                string insertDeckQuery = @"
+                        INSERT INTO decks (userid, card_1_id, card_2_id, card_3_id, card_4_id)
+                        VALUES (@userId, @card1Id, @card2Id, @card3Id, @card4Id);";
+                ExecuteNonQuery(insertDeckQuery, new Dictionary<string, object>
+                    {
+                        { "@userId", userId },
+                        { "@card1Id", card1Id },
+                        { "@card2Id", card2Id },
+                        { "@card3Id", card3Id },
+                        { "@card4Id", card4Id }
+                    });
+
+                string resetInDeckQuery = "UPDATE user_stacks SET in_deck = FALSE WHERE userid = @userId;";
+                ExecuteNonQuery(resetInDeckQuery, new Dictionary<string, object> { { "@userId", userId } });
+
+                string updateInDeckQuery = @"
+                        UPDATE user_stacks
+                        SET in_deck = TRUE
+                        WHERE userid = @userId AND card_id IN (@card1Id, @card2Id, @card3Id, @card4Id);";
+                ExecuteNonQuery(updateInDeckQuery, new Dictionary<string, object>
+                    {
+                        { "@userId", userId },
+                        { "@card1Id", card1Id },
+                        { "@card2Id", card2Id },
+                        { "@card3Id", card3Id },
+                        { "@card4Id", card4Id }
+                    });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inserting deck: {ex.Message}");
+                throw;
+            }
+        }
+        public void DeleteDeckByUser(string username)
+        {
+            string query = @"
+                DELETE FROM decks
+                WHERE userid = (SELECT userid FROM users WHERE username = @username);";
+
+            try
+            {
+                using (var cmd = new NpgsqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("username", username);
+                    int rowsAffected = cmd.ExecuteNonQuery();
+                    Console.WriteLine($"{rowsAffected} deck(s) deleted for user {username}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting deck for user {username}: {ex.Message}");
+                throw;
+            }
+        }
+
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         public T? GetSingleValue<T>(string query, Dictionary<string, object>? parameters = null)
         {
@@ -1340,7 +1489,6 @@ namespace Trimmel_MCTG.db
             {
                 using (var command = new NpgsqlCommand(query, conn))
                 {
-                    // Parameter hinzufügen, falls vorhanden
                     if (parameters != null)
                     {
                         foreach (var param in parameters)
@@ -1349,10 +1497,9 @@ namespace Trimmel_MCTG.db
                         }
                     }
 
-                    // Einzelwert ausführen
                     var result = command.ExecuteScalar();
 
-                    // Ergebnis in den gewünschten Typ konvertieren
+
                     if (result == null || result == DBNull.Value)
                     {
                         return default;
@@ -1374,7 +1521,7 @@ namespace Trimmel_MCTG.db
             {
                 using (var command = new NpgsqlCommand(query, conn))
                 {
-                    // Parameter hinzufügen, falls vorhanden
+
                     if (parameters != null)
                     {
                         foreach (var param in parameters)
@@ -1383,7 +1530,6 @@ namespace Trimmel_MCTG.db
                         }
                     }
 
-                    // SQL-Befehl ausführen und die Anzahl der betroffenen Zeilen zurückgeben
                     return command.ExecuteNonQuery();
                 }
             }
@@ -1396,14 +1542,6 @@ namespace Trimmel_MCTG.db
 
         public List<Dictionary<string, object>> ExecuteQuery(string query, Dictionary<string, object> parameters)
         {
-            if (parameters != null && parameters.Count > 0)
-            {
-                //foreach (var param in parameters)
-                //{
-                //    Console.WriteLine($"    {param.Key} = {param.Value}");
-                //}
-            }
-
             var results = new List<Dictionary<string, object>>();
             using (var command = new NpgsqlCommand(query, conn))
             {
@@ -1438,237 +1576,6 @@ namespace Trimmel_MCTG.db
             }
 
             return results;
-        }
-
-
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        public UserData? GetUserData(string username)
-        {
-            var query = @"SELECT userid, name, bio, image 
-                  FROM users 
-                  WHERE username = @username;";
-            var parameters = new Dictionary<string, object> { { "@username", username } };
-
-           
-            var result = ExecuteQuery(query, parameters).FirstOrDefault();
-            if (result == null)
-            {
-                return null;
-            }
-
-            //foreach (var kvp in result)
-            //{
-            //    Console.WriteLine($"   {kvp.Key} = {kvp.Value}");
-            //}
-
-            return new UserData
-            {
-                UserId = Convert.ToInt32(result["userid"]),  // if you have an int
-                Name = result["name"].ToString(),
-                Bio = result["bio"].ToString(),
-                Image = result["image"].ToString()
-            };
-        }
-
-
-        public void UpdateUserData(Database db, string currentUsername, string newName, string bio, string image)
-        {
-            // Prüfen, ob der neue Benutzername existiert
-            if (!string.IsNullOrEmpty(newName) && newName != currentUsername)
-            {
-                var parameters = new Dictionary<string, object>
-                {
-                    { "@newUsername", newName }
-                };
-
-                var existingUserCheck = db.ExecuteQuery("SELECT username FROM Users WHERE username = @newUsername", parameters);
-                if (existingUserCheck.Count > 0)
-                {
-                    throw new Exception($"The username '{newName}' is already taken.");
-                }
-            }
-
-            // Parameter für das Update vorbereiten
-            var updateParams = new Dictionary<string, object>
-            {
-                { "@bio", bio ?? string.Empty },
-                { "@image", image ?? string.Empty },
-                { "@currentUsername", currentUsername }
-            };
-
-            // Grundlegendes Update ohne Benutzername
-            string updateQuery = "UPDATE Users SET Bio = @bio, Image = @image WHERE Username = @currentUsername";
-
-            // Benutzername wird aktualisiert, wenn ein neuer Name angegeben wurde
-            if (!string.IsNullOrEmpty(newName) && newName != currentUsername)
-            {
-                updateQuery = "UPDATE Users SET Bio = @bio, Image = @image, Username = @newUsername WHERE Username = @currentUsername";
-                updateParams["@newUsername"] = newName;
-            }
-
-            // Update ausführen
-            db.ExecuteNonQuery(updateQuery, updateParams);
-        }
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        public void UpdateUser(Database db, string username, string newName, string bio, string image)
-        {
-            if (!string.IsNullOrEmpty(newName))
-            {
-                // Prüfe, ob der neue Benutzername bereits existiert
-                var parameters = new Dictionary<string, object>
-                {
-                    { "@NewName", newName }
-                };
-                var result = db.ExecuteQuery("SELECT username FROM Users WHERE username = @NewName", parameters);
-
-                if (result.Count > 0)
-                {
-                    throw new Exception("Username already exists.");
-                }
-            }
-
-            // Führe das Update durch
-            var updateParams = new Dictionary<string, object>
-            {
-                { "@Bio", bio ?? string.Empty },
-                { "@Image", image ?? string.Empty },
-                { "@Username", username }
-            };
-            string query = "UPDATE Users SET Bio = @Bio, Image = @Image WHERE Username = @Username";
-
-            if (!string.IsNullOrEmpty(newName))
-            {
-                query = "UPDATE Users SET Bio = @Bio, Image = @Image, Username = @NewName WHERE Username = @Username";
-                updateParams["@NewName"] = newName;
-            }
-
-            db.ExecuteNonQuery(query, updateParams);
-        }
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        public int? GetUserIdFromToken(string token)
-        {
-            try
-            {
-                return GetSingleValue<int>(
-                    "SELECT userid FROM users WHERE token = @token",
-                    new Dictionary<string, object> { { "@token", token } }
-                );
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error retrieving UserId from token: {ex.Message}");
-                return null;
-            }
-        }
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        public void UpdateScoreboard(string winnerUsername, string loserUsername)
-        {
-            // Gewinner upserten
-            var queryWinner = @"
-                INSERT INTO scoreboard (userid, wins, losses, elo) 
-                VALUES ((SELECT userid FROM users WHERE username = @winner), 1, 0, 10)
-                ON CONFLICT (userid) 
-                DO UPDATE SET wins = scoreboard.wins + 1, elo = scoreboard.elo + 10, updated_at = CURRENT_TIMESTAMP;";
-
-            // Verlierer upserten
-            var queryLoser = @"
-                INSERT INTO scoreboard (userid, wins, losses, elo) 
-                VALUES ((SELECT userid FROM users WHERE username = @loser), 0, 1, -10)
-                ON CONFLICT (userid) 
-                DO UPDATE SET losses = scoreboard.losses + 1, elo = scoreboard.elo - 10, updated_at = CURRENT_TIMESTAMP;";
-
-            ExecuteNonQuery(queryWinner, new Dictionary<string, object> { { "@winner", winnerUsername } });
-            ExecuteNonQuery(queryLoser, new Dictionary<string, object> { { "@loser", loserUsername } });
-        }
-
-        //---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        public int InsertBattle(int user1Id, int user2Id)
-        {
-            string query = @"
-                INSERT INTO battles (user1id, user2id)
-                VALUES (@user1Id, @user2Id)
-                RETURNING battle_id;
-            ";
-
-            try
-            {
-                using (var cmd = new NpgsqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("user1Id", user1Id);
-                    cmd.Parameters.AddWithValue("user2Id", user2Id);
-
-                    // ExecuteScalar gibt das erste Feld der ersten Zeile zurück
-                    var result = cmd.ExecuteScalar();
-                    return result != null ? Convert.ToInt32(result) : -1;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error inserting battle: {ex.Message}");
-                throw;
-            }
-        }
-
-        public void UpdateBattleEnd(int battleId, int winnerId, string logs)
-        {
-            string query = @"
-                UPDATE battles
-                SET winnerid = @winnerId,
-                    end_time = CURRENT_TIMESTAMP,
-                    logs = @logs
-                WHERE battle_id = @battleId;
-            ";
-
-            try
-            {
-                using (var cmd = new NpgsqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("winnerId", winnerId);
-                    cmd.Parameters.AddWithValue("logs", logs);
-                    cmd.Parameters.AddWithValue("battleId", battleId);
-
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    if (rowsAffected == 0)
-                    {
-                        Console.WriteLine($"No battle found with battle_id = {battleId}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error updating battle end: {ex.Message}");
-                throw;
-            }
-        }
-
-
-
-
-        public void Dispose()
-        {
-            try
-            {
-                DropTables();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error during table drop in Dispose: {ex.Message}");
-            }
-            finally
-            {
-                conn?.Close();
-                conn?.Dispose();
-                Console.WriteLine("Database connection closed and disposed.");
-            }
         }
     }
 }

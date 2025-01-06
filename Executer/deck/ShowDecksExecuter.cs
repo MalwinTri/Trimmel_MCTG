@@ -6,7 +6,7 @@ using Trimmel_MCTG.DB;
 using Trimmel_MCTG.HTTP;
 using CustomHttpMethod = Trimmel_MCTG.HTTP.HttpMethod;
 
-namespace Trimmel_MCTG.Execute
+namespace Trimmel_MCTG.Executer.deck
 {
     public class ShowDecksExecuter : IRouteCommand
     {
@@ -29,7 +29,6 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                // Token-Validierung
                 if (string.IsNullOrEmpty(requestContext?.Token))
                 {
                     response.Payload = "Token is missing or invalid.";
@@ -37,24 +36,12 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Benutzername aus Token extrahieren
                 string username = requestContext.Token.Split('-')[0];
-                //Console.WriteLine($"Authentifizierter Benutzer: {username}");
 
-                // Routen-Handling
-                // Console.WriteLine($"Received ResourcePath: {requestContext.ResourcePath}");
-                //if (requestContext.ResourcePath == "/deck/unconfigured")
-                //{
-                //    Console.WriteLine("Aufruf: /deck/unconfigured");
-                //    return ShowUnconfiguredDeck(username);
-                //}
-
-                // Konfigurierte Decks oder Deck-Konfiguration
                 var format = requestContext.QueryParameters?.ContainsKey("format") ?? false
                     ? requestContext.QueryParameters["format"]
                     : "json";
 
-                //Console.WriteLine($"HTTP-Methode: {requestContext.Method}, Format: {format}");
 
                 return requestContext.Method switch
                 {
@@ -77,21 +64,20 @@ namespace Trimmel_MCTG.Execute
             return response;
         }
 
-        // Methode zum Anzeigen des konfigurierten Decks (GET /deck)
         private Response ShowConfiguredDeck(string username, string format)
         {
             var response = new Response();
             try
             {
                 var deckCards = db.GetConfiguredDeck(username);
-               
+
                 if (deckCards == null || deckCards.Count == 0)
                 {
                     response.Payload = format == "plain" ? "Deck is empty." : JsonConvert.SerializeObject(new List<object>());
                     response.StatusCode = StatusCode.Ok;
                 }
                 else
-                {                
+                {
                     response.Payload = format == "plain"
                         ? FormatDeckAsPlainText(deckCards, username)
                         : JsonConvert.SerializeObject(deckCards);
@@ -107,14 +93,12 @@ namespace Trimmel_MCTG.Execute
             return response;
         }
 
-        // Methode zum Konfigurieren des Decks (PUT /deck)
         private Response ConfigureDeckFromPayload(string username)
         {
             var response = new Response();
 
             try
             {
-                // Prüfen, ob ein Body vorhanden ist
                 if (string.IsNullOrEmpty(requestContext.Payload))
                 {
                     response.Payload = "Request body is missing.";
@@ -122,10 +106,8 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // JSON-Array von Card-IDs auslesen
                 var cardIds = JsonConvert.DeserializeObject<List<string>>(requestContext.Payload);
 
-                // Überprüfen, ob genau 4 Karten ausgewählt wurden
                 if (cardIds == null || cardIds.Count != 4)
                 {
                     response.Payload = "You must provide exactly 4 card IDs.";
@@ -133,7 +115,6 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Deck konfigurieren über die Database-Klasse
                 db.ConfigureDeck(username, cardIds);
 
                 response.Payload = "Deck configured successfully.";
@@ -148,7 +129,6 @@ namespace Trimmel_MCTG.Execute
             return response;
         }
 
-        // Methode zum Anzeigen des unkonfigurierten Decks (GET /deck/unconfigured)
         private Response ShowUnconfiguredDeck(string username)
         {
             var response = new Response();
@@ -159,7 +139,7 @@ namespace Trimmel_MCTG.Execute
 
                 if (deckCards == null || deckCards.Count == 0)
                 {
-                    response.Payload = JsonConvert.SerializeObject(new List<object>()); // Leeres JSON-Array
+                    response.Payload = JsonConvert.SerializeObject(new List<object>()); 
                     response.StatusCode = StatusCode.Ok;
                 }
                 else
@@ -177,7 +157,6 @@ namespace Trimmel_MCTG.Execute
             return response;
         }
 
-        // Methode zum Formatieren des Decks als Plain Text
         private string FormatDeckAsPlainText(List<Cards> deckCards, string username)
         {
             var sb = new StringBuilder();

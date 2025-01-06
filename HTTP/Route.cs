@@ -2,6 +2,11 @@
 using Newtonsoft.Json;
 using Trimmel_MCTG.Execute;
 using Trimmel_MCTG.Executer;
+using Trimmel_MCTG.Executer.card;
+using Trimmel_MCTG.Executer.deck;
+using Trimmel_MCTG.Executer.trading;
+using Trimmel_MCTG.Executer.transaction;
+using Trimmel_MCTG.Executer.user;
 
 namespace Trimmel_MCTG.HTTP
 {
@@ -21,7 +26,7 @@ namespace Trimmel_MCTG.HTTP
                 { (HttpMethod.Post, "/users"), request => new RegisterExecuter(request) },
                 { (HttpMethod.Post, "/sessions"), request => new LoginExecuter(request) },
                 { (HttpMethod.Post, "/packages"), request => new CreatePackageExecuter(request) },
-                { (HttpMethod.Post, "/transactions/packages"), request => new AcquirePackage(request) },
+                { (HttpMethod.Post, "/transactions/packages"), request => new AcquirePackagesExecuter(request) },
                 { (HttpMethod.Get, "/cards"), request => new ShowCardsExecuter(request) },
                 { (HttpMethod.Get, "/deck"), request => new ShowDecksExecuter(request) },
                 { (HttpMethod.Put, "/deck"), request => new ShowDecksExecuter(request) },

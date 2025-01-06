@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.DB;
+using Trimmel_MCTG.helperClass;
 using Trimmel_MCTG.HTTP;
 
 public class ShowStatsExecuter : IRouteCommand
@@ -16,7 +17,7 @@ public class ShowStatsExecuter : IRouteCommand
 
     public void SetDatabase(Database database)
     {
-        this.db = database; // Datenbankverbindung setzen
+        this.db = database;
     }
 
     public Response Execute()
@@ -78,19 +79,9 @@ public class ShowStatsExecuter : IRouteCommand
         throw new UnauthorizedAccessException("Invalid token format.");
     }
 
-    public class StatsResponse
-    {
-        public string Username { get; set; }
-        public UserStatsResponse UserStats { get; set; }
-    }
+   
 
-    public class UserStatsResponse
-    {
-        public int UserId { get; set; }
-        public int Wins { get; set; }
-        public int Losses { get; set; }
-        public int Elo { get; set; }
-    }
+    
 }
 
 

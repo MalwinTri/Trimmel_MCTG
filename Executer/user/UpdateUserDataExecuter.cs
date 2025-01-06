@@ -4,7 +4,7 @@ using Npgsql;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 
-namespace Trimmel_MCTG.Execute
+namespace Trimmel_MCTG.Executer.user
 {
     public class UpdateUserDataExecuter : IRouteCommand
     {
@@ -14,7 +14,7 @@ namespace Trimmel_MCTG.Execute
 
         public UpdateUserDataExecuter(RequestContext request, string username)
         {
-            this.requestContext = request;
+            requestContext = request;
             this.username = username;
         }
 
@@ -29,10 +29,8 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                // Extrahiere den Benutzernamen aus dem Token
                 string tokenUsername = ExtractUsernameFromToken(requestContext.Token);
 
-                // Überprüfen, ob der Benutzer autorisiert ist
                 if (tokenUsername != username)
                 {
                     response.Payload = "You are not authorized to update this user data.";
@@ -40,7 +38,6 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Lese den Payload und überprüfe auf null
                 if (string.IsNullOrEmpty(requestContext.Payload))
                 {
                     response.Payload = "Payload is missing or empty.";
@@ -73,11 +70,9 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Aktualisieren der Daten
                 user.Bio = updatedData.Bio;
                 user.Image = updatedData.Image;
 
-                // Speichern Sie die aktualisierten Daten
                 var parameters = new Dictionary<string, object>
                 {
                     { "@username", username },
@@ -115,11 +110,10 @@ namespace Trimmel_MCTG.Execute
                 throw new ArgumentException("Token cannot be null or empty.", nameof(token));
             }
 
-            // Trenne den Benutzernamen vom Suffix
             var tokenParts = token.Split('-');
             if (tokenParts.Length > 0)
             {
-                return tokenParts[0]; // Der Benutzername ist der erste Teil
+                return tokenParts[0];
             }
 
             throw new InvalidOperationException("Invalid token format.");
@@ -127,11 +121,5 @@ namespace Trimmel_MCTG.Execute
 
     }
 
-    public class UserData
-    {
-        public int UserId { get; set; }   
-        public string Name { get; set; }
-        public string Bio { get; set; }
-        public string Image { get; set; }
-    }
+    
 }

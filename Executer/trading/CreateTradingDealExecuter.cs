@@ -5,8 +5,9 @@ using Trimmel_MCTG.DB;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 using MCTG_Trimmel.HTTP;
+using Trimmel_MCTG.helperClass;
 
-namespace Trimmel_MCTG.Executer
+namespace Trimmel_MCTG.Executer.trading
 {
     internal class CreateTradingDealExecuter : IRouteCommand
     {
@@ -20,7 +21,7 @@ namespace Trimmel_MCTG.Executer
 
         public void SetDatabase(Database database)
         {
-            db = database; // Datenbankverbindung setzen
+            db = database; 
         }
 
         public Response Execute()
@@ -29,7 +30,6 @@ namespace Trimmel_MCTG.Executer
 
             try
             {
-                // JSON-Body des Requests parsen
                 var payload = JsonConvert.DeserializeObject<TradingDealPayload>(requestContext.Payload);
                 if (payload == null)
                 {
@@ -38,7 +38,6 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Validierung der Eingabedaten
                 if (string.IsNullOrEmpty(payload.Id) ||
                     string.IsNullOrEmpty(payload.CardToTrade) ||
                     string.IsNullOrEmpty(payload.Type) ||
@@ -49,7 +48,6 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Überprüfen, ob der Benutzer existiert
                 string username = ExtractUsernameFromToken(requestContext.Token);
                 var user = Users.LoadFromDatabase(db, username);
                 if (user == null)
@@ -59,7 +57,6 @@ namespace Trimmel_MCTG.Executer
                     return response;
                 }
 
-                // Handelsangebot in der Datenbank erstellen
                 var parameters = new Dictionary<string, object>
                 {
                     { "@tradingId", Guid.Parse(payload.Id) }, // Übernimm die `Id` aus dem Request
@@ -98,15 +95,6 @@ namespace Trimmel_MCTG.Executer
                 return parts[0];
 
             throw new InvalidOperationException("Invalid token format.");
-        }
-
-        // TradingDealPayload-Klasse zur Deserialisierung des JSON-Requests
-        private class TradingDealPayload
-        {
-            public string Id { get; set; } // Optional, wenn von der API mitgegeben
-            public string CardToTrade { get; set; }
-            public string Type { get; set; }
-            public int MinimumDamage { get; set; }
         }
     }
 }

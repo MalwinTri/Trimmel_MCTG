@@ -27,7 +27,6 @@ internal class DeleteTradingDealExecuter : IRouteCommand
 
         try
         {
-            // tradingId überprüfen und in GUID umwandeln
             if (!Guid.TryParse(tradingId, out var parsedTradingId))
             {
                 response.Payload = "Invalid trading ID (must be a valid GUID).";
@@ -35,7 +34,6 @@ internal class DeleteTradingDealExecuter : IRouteCommand
                 return response;
             }
 
-            // Prüfen, ob der Datensatz existiert
             var parameters = new Dictionary<string, object> { { "@tradingId", parsedTradingId } };
             var result = db.ExecuteQuery("SELECT * FROM trading WHERE tradingid = @tradingId", parameters);
 
@@ -46,7 +44,6 @@ internal class DeleteTradingDealExecuter : IRouteCommand
                 return response;
             }
 
-            // Löschen
             db.ExecuteNonQuery("DELETE FROM trading WHERE tradingid = @tradingId", parameters);
 
             response.Payload = "Trading deal deleted successfully.";

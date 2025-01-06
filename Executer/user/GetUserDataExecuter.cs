@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 using Trimmel_MCTG.db;
 using Trimmel_MCTG.HTTP;
 
-namespace Trimmel_MCTG.Execute
+namespace Trimmel_MCTG.Executer.user
 {
     public class GetUserDataExecuter : IRouteCommand
     {
@@ -13,7 +13,7 @@ namespace Trimmel_MCTG.Execute
 
         public GetUserDataExecuter(RequestContext request, string username)
         {
-            this.requestContext = request;
+            requestContext = request;
             this.username = username;
         }
 
@@ -28,7 +28,6 @@ namespace Trimmel_MCTG.Execute
 
             try
             {
-                // Überprüfe Berechtigung: Nur der Benutzer selbst darf seine Daten abrufen
                 string requestingUser = ExtractUsernameFromToken(requestContext.Token);
                 if (requestingUser != username)
                 {
@@ -37,7 +36,6 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Lade Benutzer aus der Datenbank
                 var user = Users.LoadFromDatabase(db, username);
                 if (user == null)
                 {
@@ -46,18 +44,16 @@ namespace Trimmel_MCTG.Execute
                     return response;
                 }
 
-                // Erfolgreiche Antwort
                 response.Payload = JsonConvert.SerializeObject(new
                 {
                     Name = user.Username,
-                    Bio = user.Bio,
-                    Image = user.Image
+                    user.Bio,
+                    user.Image
                 });
                 response.StatusCode = StatusCode.Ok;
             }
             catch (Exception ex)
             {
-                // Allgemeiner Fehlerfall
                 response.Payload = $"An error occurred: {ex.Message}";
                 response.StatusCode = StatusCode.InternalServerError;
             }
@@ -70,7 +66,6 @@ namespace Trimmel_MCTG.Execute
             if (string.IsNullOrEmpty(token))
                 throw new UnauthorizedAccessException("Authorization token is missing.");
 
-            // Extrahiere Benutzernamen aus Token
             string[] tokenParts = token.Split('-');
             if (tokenParts.Length < 2)
                 throw new UnauthorizedAccessException("Invalid authorization token format.");

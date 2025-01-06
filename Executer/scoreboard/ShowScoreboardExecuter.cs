@@ -32,7 +32,6 @@ public class ShowScoreboardExecuter : IRouteCommand
             var scoreboards = new List<Scoreboard>();
             foreach (var row in results)
             {
-                //Console.WriteLine($"Processing row: {JsonConvert.SerializeObject(row)}");
                 scoreboards.Add(new Scoreboard
                 {
                     Id = Convert.ToInt32(row["id"]),
